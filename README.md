@@ -56,7 +56,7 @@ impl Broadcast for BebBroadcast {
 
 ## Roadmap
 
-- [ ] lexer, with simple code
+- [/] lexer, with simple code (Doing it ...)
 - [ ] parser , with simple code
 - [ ] type checker , with simple code
 - [ ] compiler , with simple code
