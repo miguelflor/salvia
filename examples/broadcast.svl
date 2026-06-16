@@ -9,7 +9,7 @@ pub interface Broadcast {
     fn getDeliver(self) -> trigger[Message],
 }
 
-struct BebBroadcast { 
+struct BebBroadcast {
     ids set[id], // the user can't touch this by default accessing thourght a different namespace is private
     delieverBeb trigger[Message],
 }
@@ -17,7 +17,7 @@ struct BebBroadcast {
 impl Broadcast for BebBroadcast{
 
     fn init() {
-        return BebBroadcast(ids: Self.ids, delieverBeb: trigger[Message]());
+        return BebBroadcast{ids: Self.ids, delieverBeb: init(trigger[Message])};
     }
 
     fn getDeliver(self) {
@@ -25,15 +25,15 @@ impl Broadcast for BebBroadcast{
     }
 
     fn send(self, msg Message) {
-        msg = Message(msg: "something"); // ; behaves like rust
+        msg = Message{ msg: "something" }; // ; behaves like rust
         {id <~ msg : id in self.ids} // <~ is to make a message through RPC
     }
 
     upon <~(msg Message) {
-        delieverBeb<-msg; // <- to activate the trigger
+        delieverBeb <- msg; // <- to activate the trigger
     }
 }
 
 // In other algorithm
 
-upon 
+upon
