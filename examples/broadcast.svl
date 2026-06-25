@@ -34,6 +34,3 @@ impl Broadcast for BebBroadcast{
     }
 }
 
-// In other algorithm
-
-upon
