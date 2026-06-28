@@ -3,8 +3,8 @@ const std = @import("std");
 const State = enum {
     start,
     identifier,
-    comp_less,
-    comp_greater,
+    less,
+    greater,
     equal,
 };
 
@@ -72,50 +72,126 @@ const Scanner = struct {
     }
 
     pub fn next(self: Scanner) Token {
-        var token= Token{
+        var token = Token{
             .start = self.pos,
             .end = undefined,
             .type = undefined,
-
         };
         state: switch (State.start) {
             .start => {
                 switch (self.pos) {
-                    ' ','\n','\t' => {self.pos+=1; continue :state .start},
-                    'a'...'z','A'...'Z' => {
-                        self.pos+=1;
+                    ' ', '\n', '\t' => {
+                        self.pos += 1;
+                        continue :state .start;
+                    },
+                    'a'...'z', 'A'...'Z' => {
+                        self.pos += 1;
                         token.type = .identifier;
-                        continue :state .identifier;},
-                    '[' => {token.type = .left_square; self.pos+=1;},
-                    ']' => {token.type = .right_square; self.pos+=1;},
-                    '(' => {token.type = .left_paren; self.pos+=1;},
-                    ')' => {token.type = .right_paren; self.pos+=1;},
-                    '{' => {token.type = .left_brace; self.pos+=1;},
-                    '}' => {token.type = .right_brace; self.pos+=1;},
+                        continue :state .identifier;
+                    },
+                    '[' => {
+                        token.type = .left_square;
+                        self.pos += 1;
+                    },
+                    ']' => {
+                        token.type = .right_square;
+                        self.pos += 1;
+                    },
+                    '(' => {
+                        token.type = .left_paren;
+                        self.pos += 1;
+                    },
+                    ')' => {
+                        token.type = .right_paren;
+                        self.pos += 1;
+                    },
+                    '{' => {
+                        token.type = .left_brace;
+                        self.pos += 1;
+                    },
+                    '}' => {
+                        token.type = .right_brace;
+                        self.pos += 1;
+                    },
 
-                    '+' => {token.type = .plus; self.pos+=1;},
-                    '-' => {token.type = .minus; self.pos+=1;},
-                    ',' => {token.type = .comma; self.pos+=1;},
-                    ';' => {token.type = .semicolon; self.pos+=1;},
+                    '+' => {
+                        token.type = .plus;
+                        self.pos += 1;
+                    },
+                    '-' => {
+                        token.type = .minus;
+                        self.pos += 1;
+                    },
+                    ',' => {
+                        token.type = .comma;
+                        self.pos += 1;
+                    },
+                    ';' => {
+                        token.type = .semicolon;
+                        self.pos += 1;
+                    },
                     '=' => {
-                        self.pos+=1;
-                        token.type = .equal; 
+                        self.pos += 1;
+                        token.type = .equal;
                         continue :state .equal;
                     },
                     '>' => {
-                        self.pos+=1;
-                        token.type = .greater; 
-                        continue :state .comp_greater;
+                        self.pos += 1;
+                        token.type = .greater;
+                        continue :state .greater;
                     },
                     '<' => {
-                        self.pos+=1;
-                        token.type = .less; 
-                        continue :state .comp_less;
+                        self.pos += 1;
+                        token.type = .less;
+                        continue :state .less;
                     },
                 }
+            },
+            .equal => {
+                switch (self.pos) {
+                    '=' => {
+                        self.pos += 1;
+                        token.type = .equal_equal;
+                    },
+                    else => {
+                        self.pos += 1;
+                    },
+                }
+            },
+            .greater => {
+                switch (self.pos) {
+                    '=' => {
+                        self.pos += 1;
+                        token.type = .greater_equal;
+                    },
+                    else => {
+                        self.pos += 1;
+                    },
+                }
+            },
+            .less => {
+                switch (self.pos) {
+                    '=' => {
+                        self.pos += 1;
+                        token.type = .less_equal;
+                    },
+                    else => {
+                        self.pos += 1;
+                    },
+                }
+            },
+            .identifier => {
+                switch (self.pos) {
+                    'a'...'z','A'...'Z' => {
+                        self.pos+=1;
+                        continue :state .identifier;
+                    },
+                    else => {
+                        self.pos+=1;
+                    }
+                }
             }
-        }
 
+        }
     }
 };
-
