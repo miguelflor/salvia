@@ -9,6 +9,7 @@ const State = enum {
 };
 
 const TokenType = enum {
+    invalid,
     // Single-character tokens.
     left_paren,
     right_paren,
@@ -104,7 +105,15 @@ const Scanner = struct {
         state: switch (State.start) {
             .start => {
                 switch (self.pos) {
-                    ' ', '\n', '\t' => {
+                    0 => {
+                        if (self.code.len == self.pos) {
+                            token.type = .eof;
+                        } else {
+                            self.pos += 1;
+                            token.type = .invalid;
+                        }
+                    },
+                    ' ', '\r', '\n', '\t' => {
                         self.pos += 1;
                         continue :state .start;
                     },
