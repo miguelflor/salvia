@@ -240,6 +240,10 @@ const Scanner = struct {
                     '"' => {
                         self.pos+=1;
                         token.type = .string_literal;
+                    },
+                    else => {
+                        self.pos+=1;
+                        continue :state .string;
                     }
 
                 }
