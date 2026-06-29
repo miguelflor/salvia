@@ -1,13 +1,6 @@
 const std = @import("std");
 
-const State = enum {
-    start,
-    identifier,
-    less,
-    greater,
-    string,
-    equal,
-};
+const State = enum { start, identifier, less, greater, string, equal, int, int_dot, float };
 
 const TokenType = enum {
     invalid,
@@ -35,6 +28,7 @@ const TokenType = enum {
     // literals
     identifier,
     string_literal,
+    number,
 
     // keywords.
     keyword_and,
@@ -106,7 +100,7 @@ const Scanner = struct {
         };
         state: switch (State.start) {
             .start => {
-                switch (self.code[ self.pos ]) {
+                switch (self.code[self.pos]) {
                     0 => {
                         if (self.code.len == self.pos) {
                             token.type = .eof;
@@ -118,6 +112,10 @@ const Scanner = struct {
                     ' ', '\r', '\n', '\t' => {
                         self.pos += 1;
                         continue :state .start;
+                    },
+                    '0'...'9' => {
+                        self.pos += 1;
+                        continue :state .int;
                     },
                     'a'...'z', 'A'...'Z' => {
                         self.pos += 1;
@@ -160,6 +158,10 @@ const Scanner = struct {
                         token.type = .comma;
                         self.pos += 1;
                     },
+                    '.' => {
+                        token.type = .dot;
+                        self.pos += 1;
+                    },
                     ';' => {
                         token.type = .semicolon;
                         self.pos += 1;
@@ -180,11 +182,10 @@ const Scanner = struct {
                         continue :state .less;
                     },
                     '"' => {
-                        self.pos+=1;
+                        self.pos += 1;
                         token.type = .string_literal;
                         continue :state .string;
-
-                    }
+                    },
                 }
             },
             .equal => {
@@ -238,16 +239,56 @@ const Scanner = struct {
                         token.type = .unclosed_string;
                     },
                     '"' => {
-                        self.pos+=1;
+                        self.pos += 1;
                         token.type = .string_literal;
                     },
                     else => {
-                        self.pos+=1;
+                        self.pos += 1;
                         continue :state .string;
-                    }
-
+                    },
                 }
-            }
+            },
+            .int => {
+                switch (self.code[self.pos]) {
+                    '0'...'9' => {
+                        self.pos += 1;
+                        continue :state .int;
+                    },
+                    '.' => {
+                        self.pos += 1;
+                        continue :state .int_dot;
+                    },
+                    else => {
+                        self.pos += 1;
+                    },
+                }
+            },
+            .int_dot => {
+                switch (self.code[self.pos]) {
+                    '0'...'9' => {
+                        self.pos += 1;
+                        continue :state .float;
+                    },
+                    else => {
+                        self.pos -= 1;
+                    },
+                }
+            },
+            .float => {
+                switch (self.code[self.pos]) {
+                    '0'...'9' => {
+                        self.pos += 1;
+                        continue :state .float;
+                    },
+                    else => {
+                        self.pos += 1;
+                    },
+                }
+            },
         }
+
+        token.end = self.pos;
+        return token;
     }
 };
+
