@@ -5,6 +5,7 @@ const State = enum {
     identifier,
     less,
     greater,
+    string,
     equal,
 };
 
@@ -33,6 +34,7 @@ const TokenType = enum {
 
     // literals
     identifier,
+    string_literal,
 
     // keywords.
     keyword_and,
@@ -104,7 +106,7 @@ const Scanner = struct {
         };
         state: switch (State.start) {
             .start => {
-                switch (self.pos) {
+                switch (self.code[ self.pos ]) {
                     0 => {
                         if (self.code.len == self.pos) {
                             token.type = .eof;
@@ -177,10 +179,16 @@ const Scanner = struct {
                         token.type = .less;
                         continue :state .less;
                     },
+                    '"' => {
+                        self.pos+=1;
+                        token.type = .string_literal;
+                        continue :state .string;
+
+                    }
                 }
             },
             .equal => {
-                switch (self.pos) {
+                switch (self.code[self.pos]) {
                     '=' => {
                         self.pos += 1;
                         token.type = .equal_equal;
@@ -191,7 +199,7 @@ const Scanner = struct {
                 }
             },
             .greater => {
-                switch (self.pos) {
+                switch (self.code[self.pos]) {
                     '=' => {
                         self.pos += 1;
                         token.type = .greater_equal;
@@ -202,7 +210,7 @@ const Scanner = struct {
                 }
             },
             .less => {
-                switch (self.pos) {
+                switch (self.code[self.pos]) {
                     '=' => {
                         self.pos += 1;
                         token.type = .less_equal;
@@ -213,7 +221,7 @@ const Scanner = struct {
                 }
             },
             .identifier => {
-                switch (self.pos) {
+                switch (self.code[self.pos]) {
                     'a'...'z', 'A'...'Z' => {
                         self.pos += 1;
                         continue :state .identifier;
@@ -224,6 +232,18 @@ const Scanner = struct {
                     },
                 }
             },
+            .string => {
+                switch (self.code[self.pos]) {
+                    0 => {
+                        token.type = .unclosed_string;
+                    },
+                    '"' => {
+                        self.pos+=1;
+                        token.type = .string_literal;
+                    }
+
+                }
+            }
         }
     }
 };
