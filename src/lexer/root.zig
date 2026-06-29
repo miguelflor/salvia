@@ -54,6 +54,34 @@ const TokenType = enum {
     eof,
 };
 
+const keywordStr = [_]struct { w_str: []const u8, type: TokenType }{
+    .{ "and", .keyword_and },
+    .{ "struct", .keyword_struct },
+    .{ "else", .keyword_else },
+    .{ "false", .keyword_false },
+    .{ "fun", .keyword_fun },
+    .{ "for", .keyword_for },
+    .{ "if", .keyword_if },
+    .{ "nil", .keyword_nil },
+    .{ "or", .keyword_or },
+    .{ "print", .keyword_print },
+    .{ "return", .keyword_return },
+    .{ "super", .keyword_super },
+    .{ "this", .keyword_this },
+    .{ "true", .keyword_true },
+    .{ "var", .keyword_var },
+    .{ "while", .keyword_while },
+};
+
+fn getKeywordToken(keyword: []const u8) !TokenType {
+    for (keywordStr) |key_str| {
+        if (std.mem.eql(u8, key_str.w_str, keyword)) {
+            return key_str.type;
+        }
+    }
+    return error.KeywordNotFound;
+}
+
 const Token = struct {
     start: usize,
     end: usize,
@@ -86,7 +114,6 @@ const Scanner = struct {
                     },
                     'a'...'z', 'A'...'Z' => {
                         self.pos += 1;
-                        token.type = .identifier;
                         continue :state .identifier;
                     },
                     '[' => {
@@ -182,16 +209,16 @@ const Scanner = struct {
             },
             .identifier => {
                 switch (self.pos) {
-                    'a'...'z','A'...'Z' => {
-                        self.pos+=1;
+                    'a'...'z', 'A'...'Z' => {
+                        self.pos += 1;
                         continue :state .identifier;
                     },
                     else => {
-                        self.pos+=1;
-                    }
+                        token.type = getKeywordToken(self.code[token.start..self.pos]) catch .identifier;
+                        self.pos += 1;
+                    },
                 }
-            }
-
+            },
         }
     }
 };
