@@ -292,3 +292,17 @@ const Scanner = struct {
     }
 };
 
+pub fn tokenize(allocator: std.mem.Allocator, code: []const u8) std.MultiArrayList(Token){
+    const scanner = Scanner.init(code);
+    const list: std.MultiArrayList(Token) = .empty;
+
+    while (true) {
+        const token = scanner.next();
+        list.addOne(allocator);
+        if (token.type == .eof){
+            break;
+        }
+    }
+
+    return list;
+}
