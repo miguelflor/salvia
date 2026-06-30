@@ -45,7 +45,7 @@ const TokenType = enum {
     keyword_return,
     keyword_this,
     keyword_true,
-    keyword_var,
+    keyword_let,
     keyword_while,
 
     eof,
@@ -64,7 +64,7 @@ const keywordStr = std.StaticStringMap(TokenType).initComptime(.{
     .{ "return", .keyword_return },
     .{ "this", .keyword_this },
     .{ "true", .keyword_true },
-    .{ "var", .keyword_var },
+    .{ "let", .keyword_let },
     .{ "while", .keyword_while },
 });
 
@@ -165,18 +165,22 @@ const Scanner = struct {
                         self.pos += 1;
                     },
                     '=' => {
+                        self.pos += 1;
                         token.type = .equal;
                         continue :state .equal;
                     },
                     '>' => {
+                        self.pos += 1;
                         token.type = .greater;
                         continue :state .greater;
                     },
                     '<' => {
+                        self.pos += 1;
                         token.type = .less;
                         continue :state .less;
                     },
                     '"' => {
+                        self.pos += 1;
                         token.type = .string_literal;
                         continue :state .string;
                     },
@@ -305,10 +309,18 @@ pub fn tokenize(allocator: std.mem.Allocator, code: [:0]const u8) !std.MultiArra
 
 // Tests
 
-test "variable token" {
+test "sum" {
     const code: [:0]const u8 = "1 + 1";
     var list = try tokenize(testing.allocator, code);
     defer list.deinit(testing.allocator);
     try testing.expectEqualSlices(TokenType, &[_]TokenType{ .number, .plus, .number, .eof },list.items(.type));
     try testing.expectEqualSlices(usize, &[_]usize{ 0, 2, 4, 5 }, list.items(.start));
+}
+
+test "variable defenition" {
+    const code: [:0]const u8 = "let foo = 1";
+    var list = try tokenize(testing.allocator, code);
+    defer list.deinit(testing.allocator);
+    try testing.expectEqualSlices(TokenType, &[_]TokenType{ .keyword_let, .identifier, .equal, .number, .eof },list.items(.type));
+    try testing.expectEqualSlices(usize, &[_]usize{ 0, 4, 8, 10,11 }, list.items(.start));
 }
