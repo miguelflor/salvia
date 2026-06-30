@@ -79,10 +79,10 @@ const Token = struct {
 };
 
 const Scanner = struct {
-    code: []const u8,
+    code: [:0]const u8,
     pos: usize,
 
-    pub fn init(code: []const u8) Scanner {
+    pub fn init(code: [:0]const u8) Scanner {
         return Scanner{
             .code = code,
             .pos = 0,
@@ -108,14 +108,15 @@ const Scanner = struct {
                     },
                     ' ', '\r', '\n', '\t' => {
                         self.pos += 1;
+                        token.start=self.pos;
                         continue :state .start;
                     },
                     '0'...'9' => {
-                        self.pos += 1;
+                        self.pos+=1;
+                        token.type = .number;
                         continue :state .int;
                     },
                     'a'...'z', 'A'...'Z' => {
-                        self.pos += 1;
                         continue :state .identifier;
                     },
                     '[' => {
@@ -164,22 +165,18 @@ const Scanner = struct {
                         self.pos += 1;
                     },
                     '=' => {
-                        self.pos += 1;
                         token.type = .equal;
                         continue :state .equal;
                     },
                     '>' => {
-                        self.pos += 1;
                         token.type = .greater;
                         continue :state .greater;
                     },
                     '<' => {
-                        self.pos += 1;
                         token.type = .less;
                         continue :state .less;
                     },
                     '"' => {
-                        self.pos += 1;
                         token.type = .string_literal;
                         continue :state .string;
                     },
@@ -259,9 +256,7 @@ const Scanner = struct {
                         self.pos += 1;
                         continue :state .int_dot;
                     },
-                    else => {
-                        self.pos += 1;
-                    },
+                    else => {},
                 }
             },
             .int_dot => {
@@ -293,13 +288,13 @@ const Scanner = struct {
     }
 };
 
-pub fn tokenize(allocator: std.mem.Allocator, code: []const u8) !std.MultiArrayList(Token) {
+pub fn tokenize(allocator: std.mem.Allocator, code: [:0]const u8) !std.MultiArrayList(Token) {
     var scanner = Scanner.init(code);
     var list: std.MultiArrayList(Token) = .empty;
 
     while (true) {
         const token = scanner.next();
-        _ = try list.addOne(allocator);
+        try list.append(allocator, token);
         if (token.type == .eof) {
             break;
         }
@@ -311,9 +306,9 @@ pub fn tokenize(allocator: std.mem.Allocator, code: []const u8) !std.MultiArrayL
 // Tests
 
 test "variable token" {
-    const code = "1 + 1";
+    const code: [:0]const u8 = "1 + 1";
     var list = try tokenize(testing.allocator, code);
     defer list.deinit(testing.allocator);
-    try testing.expectEqualSlices(TokenType, list.items(.type), &[_]TokenType{ .number, .plus, .number, .eof });
-    try testing.expectEqualSlices(usize, list.items(.start), &[_]usize{ 0, 2, 4, 5 });
+    try testing.expectEqualSlices(TokenType, &[_]TokenType{ .number, .plus, .number, .eof },list.items(.type));
+    try testing.expectEqualSlices(usize, &[_]usize{ 0, 2, 4, 5 }, list.items(.start));
 }
