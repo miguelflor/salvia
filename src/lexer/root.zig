@@ -1,9 +1,11 @@
 const std = @import("std");
+const testing = std.testing;
 
 const State = enum { start, identifier, less, greater, string, equal, int, int_dot, float };
 
 const TokenType = enum {
     invalid,
+    unclosed_string,
     // Single-character tokens.
     left_paren,
     right_paren,
@@ -49,7 +51,7 @@ const TokenType = enum {
     eof,
 };
 
-const keywordStr = [_]struct { w_str: []const u8, type: TokenType }{
+const keywordStr = std.StaticStringMap(TokenType).initComptime(.{
     .{ "and", .keyword_and },
     .{ "struct", .keyword_struct },
     .{ "else", .keyword_else },
@@ -64,15 +66,10 @@ const keywordStr = [_]struct { w_str: []const u8, type: TokenType }{
     .{ "true", .keyword_true },
     .{ "var", .keyword_var },
     .{ "while", .keyword_while },
-};
+});
 
-fn getKeywordToken(keyword: []const u8) !TokenType {
-    for (keywordStr) |key_str| {
-        if (std.mem.eql(u8, key_str.w_str, keyword)) {
-            return key_str.type;
-        }
-    }
-    return error.KeywordNotFound;
+fn getKeywordToken(keyword: []const u8) ?TokenType {
+    return keywordStr.get(keyword);
 }
 
 const Token = struct {
@@ -92,7 +89,7 @@ const Scanner = struct {
         };
     }
 
-    pub fn next(self: Scanner) Token {
+    pub fn next(self: *Scanner) Token {
         var token = Token{
             .start = self.pos,
             .end = undefined,
@@ -186,6 +183,10 @@ const Scanner = struct {
                         token.type = .string_literal;
                         continue :state .string;
                     },
+                    else => {
+                        self.pos += 1;
+                        token.type = .invalid;
+                    },
                 }
             },
             .equal => {
@@ -228,7 +229,7 @@ const Scanner = struct {
                         continue :state .identifier;
                     },
                     else => {
-                        token.type = getKeywordToken(self.code[token.start..self.pos]) catch .identifier;
+                        token.type = getKeywordToken(self.code[token.start..self.pos]) orelse .identifier;
                         self.pos += 1;
                     },
                 }
@@ -292,17 +293,27 @@ const Scanner = struct {
     }
 };
 
-pub fn tokenize(allocator: std.mem.Allocator, code: []const u8) std.MultiArrayList(Token){
-    const scanner = Scanner.init(code);
-    const list: std.MultiArrayList(Token) = .empty;
+pub fn tokenize(allocator: std.mem.Allocator, code: []const u8) !std.MultiArrayList(Token) {
+    var scanner = Scanner.init(code);
+    var list: std.MultiArrayList(Token) = .empty;
 
     while (true) {
         const token = scanner.next();
-        list.addOne(allocator);
-        if (token.type == .eof){
+        _ = try list.addOne(allocator);
+        if (token.type == .eof) {
             break;
         }
     }
 
     return list;
+}
+
+// Tests
+
+test "variable token" {
+    const code = "1 + 1";
+    var list = try tokenize(testing.allocator, code);
+    defer list.deinit(testing.allocator);
+    try testing.expectEqualSlices(TokenType, list.items(.type), &[_]TokenType{ .number, .plus, .number, .eof });
+    try testing.expectEqualSlices(usize, list.items(.start), &[_]usize{ 0, 2, 4, 5 });
 }
