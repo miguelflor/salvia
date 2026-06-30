@@ -101,68 +101,81 @@ const Scanner = struct {
                     0 => {
                         if (self.code.len == self.pos) {
                             token.type = .eof;
+                            token.end = self.pos;
                         } else {
                             self.pos += 1;
                             token.type = .invalid;
+                            token.end = self.pos;
                         }
                     },
                     ' ', '\r', '\n', '\t' => {
                         self.pos += 1;
-                        token.start=self.pos;
+                        token.start = self.pos;
                         continue :state .start;
                     },
                     '0'...'9' => {
-                        self.pos+=1;
+                        self.pos += 1;
                         token.type = .number;
                         continue :state .int;
                     },
                     'a'...'z', 'A'...'Z' => {
+                        self.pos += 1;
                         continue :state .identifier;
                     },
                     '[' => {
                         token.type = .left_square;
                         self.pos += 1;
+                        token.end = self.pos;
                     },
                     ']' => {
                         token.type = .right_square;
                         self.pos += 1;
+                        token.end = self.pos;
                     },
                     '(' => {
                         token.type = .left_paren;
                         self.pos += 1;
+                        token.end = self.pos;
                     },
                     ')' => {
                         token.type = .right_paren;
                         self.pos += 1;
+                        token.end = self.pos;
                     },
                     '{' => {
                         token.type = .left_brace;
                         self.pos += 1;
+                        token.end = self.pos;
                     },
                     '}' => {
                         token.type = .right_brace;
                         self.pos += 1;
+                        token.end = self.pos;
                     },
-
                     '+' => {
                         token.type = .plus;
                         self.pos += 1;
+                        token.end = self.pos;
                     },
                     '-' => {
                         token.type = .minus;
                         self.pos += 1;
+                        token.end = self.pos;
                     },
                     ',' => {
                         token.type = .comma;
                         self.pos += 1;
+                        token.end = self.pos;
                     },
                     '.' => {
                         token.type = .dot;
                         self.pos += 1;
+                        token.end = self.pos;
                     },
                     ';' => {
                         token.type = .semicolon;
                         self.pos += 1;
+                        token.end = self.pos;
                     },
                     '=' => {
                         self.pos += 1;
@@ -186,6 +199,7 @@ const Scanner = struct {
                     },
                     else => {
                         self.pos += 1;
+                        token.end = self.pos;
                         token.type = .invalid;
                     },
                 }
@@ -196,10 +210,9 @@ const Scanner = struct {
                         self.pos += 1;
                         token.type = .equal_equal;
                     },
-                    else => {
-                        self.pos += 1;
-                    },
+                    else => {},
                 }
+                token.end = self.pos;
             },
             .greater => {
                 switch (self.code[self.pos]) {
@@ -207,10 +220,9 @@ const Scanner = struct {
                         self.pos += 1;
                         token.type = .greater_equal;
                     },
-                    else => {
-                        self.pos += 1;
-                    },
+                    else => {},
                 }
+                token.end = self.pos;
             },
             .less => {
                 switch (self.code[self.pos]) {
@@ -218,10 +230,9 @@ const Scanner = struct {
                         self.pos += 1;
                         token.type = .less_equal;
                     },
-                    else => {
-                        self.pos += 1;
-                    },
+                    else => {},
                 }
+                token.end = self.pos;
             },
             .identifier => {
                 switch (self.code[self.pos]) {
@@ -231,7 +242,7 @@ const Scanner = struct {
                     },
                     else => {
                         token.type = getKeywordToken(self.code[token.start..self.pos]) orelse .identifier;
-                        self.pos += 1;
+                        token.end = self.pos;
                     },
                 }
             },
@@ -239,10 +250,11 @@ const Scanner = struct {
                 switch (self.code[self.pos]) {
                     0 => {
                         token.type = .unclosed_string;
+                        token.end = self.pos;
                     },
                     '"' => {
                         self.pos += 1;
-                        token.type = .string_literal;
+                        token.end = self.pos;
                     },
                     else => {
                         self.pos += 1;
@@ -260,7 +272,9 @@ const Scanner = struct {
                         self.pos += 1;
                         continue :state .int_dot;
                     },
-                    else => {},
+                    else => {
+                        token.end = self.pos;
+                    },
                 }
             },
             .int_dot => {
@@ -271,6 +285,7 @@ const Scanner = struct {
                     },
                     else => {
                         self.pos -= 1;
+                        token.end = self.pos;
                     },
                 }
             },
@@ -281,13 +296,12 @@ const Scanner = struct {
                         continue :state .float;
                     },
                     else => {
-                        self.pos += 1;
+                        token.end = self.pos;
                     },
                 }
             },
         }
 
-        token.end = self.pos;
         return token;
     }
 };
@@ -324,7 +338,7 @@ test "variable defenition" {
     defer list.deinit(testing.allocator);
     try testing.expectEqualSlices(TokenType, &[_]TokenType{ .keyword_let, .identifier, .equal, .number, .eof }, list.items(.type));
     try testing.expectEqualSlices(usize, &[_]usize{ 0, 4, 8, 10, 11 }, list.items(.start));
-    try testing.expectEqualSlices(usize, &[_]usize{ 4, 8, 10, 11, 11 }, list.items(.end));
+    try testing.expectEqualSlices(usize, &[_]usize{ 3, 7, 9, 11, 11 }, list.items(.end));
 }
 
 test "comparison operators" {
@@ -332,13 +346,13 @@ test "comparison operators" {
     var list = try tokenize(testing.allocator, code);
     defer list.deinit(testing.allocator);
     try testing.expectEqualSlices(TokenType, &[_]TokenType{
-        .identifier, .equal_equal, .identifier,
-        .greater_equal, .identifier, .less_equal,
-        .identifier, .greater, .identifier,
-        .less, .identifier, .eof,
+        .identifier,    .equal_equal, .identifier,
+        .greater_equal, .identifier,  .less_equal,
+        .identifier,    .greater,     .identifier,
+        .less,          .identifier,  .eof,
     }, list.items(.type));
-    try testing.expectEqualSlices(usize, &[_]usize{ 0, 2, 5, 7, 10, 12, 15, 17, 19, 21, 23, 25 }, list.items(.start));
-    try testing.expectEqualSlices(usize, &[_]usize{ 2, 4, 7, 9, 12, 14, 17, 19, 21, 23, 25, 25 }, list.items(.end));
+    try testing.expectEqualSlices(usize, &[_]usize{ 0, 2, 5, 7, 10, 12, 15, 17, 19, 21, 23, 24 }, list.items(.start));
+    try testing.expectEqualSlices(usize, &[_]usize{ 1, 4, 6, 9, 11, 14, 16, 18, 20, 22, 24, 24 }, list.items(.end));
 }
 
 test "string literal" {
@@ -364,11 +378,11 @@ test "punctuation" {
     var list = try tokenize(testing.allocator, code);
     defer list.deinit(testing.allocator);
     try testing.expectEqualSlices(TokenType, &[_]TokenType{
-        .left_paren, .right_paren,
-        .left_brace, .right_brace,
+        .left_paren,  .right_paren,
+        .left_brace,  .right_brace,
         .left_square, .right_square,
-        .comma, .dot, .semicolon,
-        .eof,
+        .comma,       .dot,
+        .semicolon,   .eof,
     }, list.items(.type));
     try testing.expectEqualSlices(usize, &[_]usize{ 0, 2, 4, 6, 8, 10, 12, 14, 16, 17 }, list.items(.start));
     try testing.expectEqualSlices(usize, &[_]usize{ 1, 3, 5, 7, 9, 11, 13, 15, 17, 17 }, list.items(.end));
@@ -379,12 +393,12 @@ test "keywords" {
     var list = try tokenize(testing.allocator, code);
     defer list.deinit(testing.allocator);
     try testing.expectEqualSlices(TokenType, &[_]TokenType{
-        .keyword_if, .keyword_else, .keyword_while,
+        .keyword_if,  .keyword_else,   .keyword_while,
         .keyword_for, .keyword_return, .keyword_fun,
         .eof,
     }, list.items(.type));
-    try testing.expectEqualSlices(usize, &[_]usize{ 0, 3, 8, 14, 18, 25, 29 }, list.items(.start));
-    try testing.expectEqualSlices(usize, &[_]usize{ 3, 8, 14, 18, 25, 29, 29 }, list.items(.end));
+    try testing.expectEqualSlices(usize, &[_]usize{ 0, 3, 8, 14, 18, 25, 28 }, list.items(.start));
+    try testing.expectEqualSlices(usize, &[_]usize{ 2, 7, 13, 17, 24, 28, 28 }, list.items(.end));
 }
 
 test "empty input" {
@@ -412,8 +426,8 @@ test "function call" {
     var list = try tokenize(testing.allocator, code);
     defer list.deinit(testing.allocator);
     try testing.expectEqualSlices(TokenType, &[_]TokenType{
-        .identifier, .left_paren, .identifier, .comma,
-        .identifier, .right_paren, .semicolon, .eof,
+        .identifier, .left_paren,  .identifier, .comma,
+        .identifier, .right_paren, .semicolon,  .eof,
     }, list.items(.type));
     try testing.expectEqualSlices(usize, &[_]usize{ 0, 3, 4, 5, 7, 8, 9, 10 }, list.items(.start));
     try testing.expectEqualSlices(usize, &[_]usize{ 3, 4, 5, 6, 8, 9, 10, 10 }, list.items(.end));
@@ -426,6 +440,6 @@ test "boolean keywords" {
     try testing.expectEqualSlices(TokenType, &[_]TokenType{
         .keyword_true, .keyword_false, .keyword_and, .keyword_or, .eof,
     }, list.items(.type));
-    try testing.expectEqualSlices(usize, &[_]usize{ 0, 5, 11, 15, 18 }, list.items(.start));
-    try testing.expectEqualSlices(usize, &[_]usize{ 5, 11, 15, 18, 18 }, list.items(.end));
+    try testing.expectEqualSlices(usize, &[_]usize{ 0, 5, 11, 15, 17 }, list.items(.start));
+    try testing.expectEqualSlices(usize, &[_]usize{ 4, 10, 14, 17, 17 }, list.items(.end));
 }
