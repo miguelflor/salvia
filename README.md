@@ -56,8 +56,8 @@ extend Broadcast with BebBroadcast{
 
 ## Roadmap
 
-- [/] lexer, with simple code (Doing it ...)
-- [ ] parser , with simple code
+- [x] lexer, with simple code
+- [ ] parser , with simple code (In progress ...)
 - [ ] type checker , with simple code
 - [ ] compiler , with simple code
 
