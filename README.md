@@ -28,28 +28,28 @@ pub interface Broadcast {
     fn getDeliver(self) -> trigger[Message],
 }
 
-struct BebBroadcast { 
-    ids set[id], // private by default, accessible only through its own namespace
+struct BebBroadcast {
+    ids set[id], // the user can't touch this by default accessing thourght a different namespace is private
     delieverBeb trigger[Message],
 }
 
-impl Broadcast for BebBroadcast {
+extend Broadcast with BebBroadcast{
 
-    fn init() {
+    proc init() {
         return BebBroadcast{ids: Self.ids, delieverBeb: init(trigger[Message])};
     }
 
-    fn getDeliver(self) {
+    proc getDeliver(self) {
         self.delieverBeb
     }
 
-    fn send(self, msg Message) {
-        msg = Message{ msg: "something" }; // ; behaves like Rust
-        {id <~ msg : id in self.ids} // <~ sends a message through RPC
+    proc send(self, msg Message) {
+        msg = Message{ msg: "something" }; // ; behaves like rust
+        {id <~ msg : id in self.ids} // <~ is to make a message through RPC
     }
 
     upon <~(msg Message) {
-        delieverBeb <- msg; // <- activates the trigger
+        delieverBeb <- msg; // <- to activate the trigger
     }
 }
 ```

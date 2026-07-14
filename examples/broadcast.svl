@@ -14,17 +14,17 @@ struct BebBroadcast {
     delieverBeb trigger[Message],
 }
 
-impl Broadcast for BebBroadcast{
+extend Broadcast with BebBroadcast{
 
-    fn init() {
+    proc init() {
         return BebBroadcast{ids: Self.ids, delieverBeb: init(trigger[Message])};
     }
 
-    fn getDeliver(self) {
+    proc getDeliver(self) {
         self.delieverBeb
     }
 
-    fn send(self, msg Message) {
+    proc send(self, msg Message) {
         msg = Message{ msg: "something" }; // ; behaves like rust
         {id <~ msg : id in self.ids} // <~ is to make a message through RPC
     }
