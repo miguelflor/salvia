@@ -45,6 +45,11 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/lexer/root.zig"),
         .target = target,
     });
+
+    const parser_mod = b.addModule("lexer", .{
+        .root_source_file = b.path("src/parser/root.zig"),
+        .target = target,
+    });
     // Here we define an executable. An executable needs to have a root module
     // which needs to expose a `main` function. While we could add a main function
     // to the module defined above, it's sometimes preferable to split business
@@ -84,6 +89,7 @@ pub fn build(b: *std.Build) void {
                 // importing modules from different packages).
                 .{ .name = "salvia", .module = salvia_mod },
                 .{ .name = "lexer", .module = lexer_mod },
+                .{ .name = "parser", .module = parser_mod },
             },
         }),
     });
