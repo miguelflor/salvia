@@ -314,11 +314,11 @@ const Lexer = struct {
 };
 
 fn tokenize(allocator: std.mem.Allocator, code: [:0]const u8) !std.MultiArrayList(Token) {
-    var scanner = Lexer.init(code);
+    var lexer = Lexer.init(code);
     var list: std.MultiArrayList(Token) = .empty;
 
     while (true) {
-        const token = scanner.next();
+        const token = lexer.next();
         try list.append(allocator, token);
         if (token.type == .eof) {
             break;
@@ -329,6 +329,24 @@ fn tokenize(allocator: std.mem.Allocator, code: [:0]const u8) !std.MultiArrayLis
 }
 
 // Tests
+
+// peek vs next
+
+test "peek is equal to next" {
+    const code: [:0]const u8 = "a == b >= c <= d > e < f";
+    var lexer = Lexer.init(code);
+
+    while (true) {
+        const peek = lexer.peek();
+        const token = lexer.next();
+        try testing.expect(std.meta.eql(peek ,token));
+        if (token.type == .eof) {
+            break;
+        }
+    }
+}
+
+// Can it lex correctly
 
 test "sum" {
     const code: [:0]const u8 = "1 + 1";
