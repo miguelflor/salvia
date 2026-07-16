@@ -78,18 +78,25 @@ const Token = struct {
     type: TokenType,
 };
 
-const Scanner = struct {
+const Lexer = struct {
     code: [:0]const u8,
     pos: usize,
 
-    pub fn init(code: [:0]const u8) Scanner {
-        return Scanner{
+    pub fn init(code: [:0]const u8) Lexer {
+        return Lexer{
             .code = code,
             .pos = 0,
         };
     }
 
-    pub fn next(self: *Scanner) Token {
+    pub fn peek(self: *Lexer) Token {
+        const temp = self.pos;
+        const token = self.next();
+        self.pos = temp;
+        return  token;
+
+    }
+    pub fn next(self: *Lexer) Token {
         var token = Token{
             .start = self.pos,
             .end = undefined,
@@ -306,8 +313,8 @@ const Scanner = struct {
     }
 };
 
-pub fn tokenize(allocator: std.mem.Allocator, code: [:0]const u8) !std.MultiArrayList(Token) {
-    var scanner = Scanner.init(code);
+fn tokenize(allocator: std.mem.Allocator, code: [:0]const u8) !std.MultiArrayList(Token) {
+    var scanner = Lexer.init(code);
     var list: std.MultiArrayList(Token) = .empty;
 
     while (true) {
