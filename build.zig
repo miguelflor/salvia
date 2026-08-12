@@ -60,11 +60,21 @@ pub fn build(b: *std.Build) void {
         run_cmd.addArgs(args);
     }
 
+    const test_filter = b.option([]const u8, "test-filter", "Filter tests by name");
+
     const lexer_tests = b.addTest(.{
         .root_module = lexer_mod,
+        .filters = if (test_filter) |f| &.{f} else &.{},
     });
 
     const run_mod_tests = b.addRunArtifact(lexer_tests);
+
+    const parser_tests = b.addTest(.{
+        .root_module = parser_mod,
+        .filters = if (test_filter) |f| &.{f} else &.{},
+    });
+
+    const run_parser_tests = b.addRunArtifact(parser_tests);
 
     const exe_tests = b.addTest(.{
         .root_module = exe.root_module,
@@ -74,6 +84,7 @@ pub fn build(b: *std.Build) void {
 
     const test_step = b.step("test", "Run tests");
     test_step.dependOn(&run_mod_tests.step);
+    test_step.dependOn(&run_parser_tests.step);
     test_step.dependOn(&run_exe_tests.step);
 
 }

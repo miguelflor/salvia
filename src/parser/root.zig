@@ -35,7 +35,7 @@ const BasicLitType = enum {
     fn FromToken(token: lexer.Token) errors.ParseError!BasicLitType {
         switch (token.type) {
             .number => {
-                std.mem.indexOfScalar(u8, token.text, '.') orelse return .int;
+                _ = std.mem.indexOfScalar(u8, token.text, '.') orelse return .int;
                 return .float;
             },
             .string_literal => return .string,
@@ -52,7 +52,7 @@ const Expr = union(enum) {
 const Bp = struct { l: u8, r: u8 };
 
 pub fn parse(code: [:0]const u8) errors.ParseError!Expr {
-    const lex = lexer.Lexer.init(code);
+    var lex = lexer.Lexer.init(code);
     return try expr_bp(&lex, 0);
 }
 
@@ -60,7 +60,7 @@ fn expr_bp(lex: *lexer.Lexer, min_bp: u8) errors.ParseError!Expr {
     const token = lex.next();
     var lhs = switch (token.type) {
         .number => {
-            return .{ .basic_lit = .{ BasicLitType.FromToken(token), token.text } };
+            return .{ .basic_lit = .{ try BasicLitType.FromToken(token), token.text } };
         },
         else => {
             return error.UnexpectedToken;
@@ -100,5 +100,57 @@ fn infix_bp(op: BinOpKind) errors.ParseError!Bp {
     }
 }
 
-// nud -> prefix handler -> called when there's no left expression yet
-// lef -> infix handler -> called when there is already a left expression
+const testing = std.testing;
+
+test "parse: single integer" {
+    const result = try parse("42");
+    try testing.expect(result == .basic_lit);
+    try testing.expectEqual(BasicLitType.int, result.basic_lit[0]);
+    try testing.expectEqualStrings("42", result.basic_lit[1]);
+}
+
+test "parse: single float" {
+    const result = try parse("3.14");
+    try testing.expect(result == .basic_lit);
+    try testing.expectEqual(BasicLitType.float, result.basic_lit[0]);
+    try testing.expectEqualStrings("3.14", result.basic_lit[1]);
+}
+
+test "parse: addition" {
+    const result = try parse("1 + 2");
+    std.debug.print("{any}", .{result});
+    try testing.expect(result == .bin_op);
+    try testing.expectEqual(BinOpKind.plus, result.bin_op[0]);
+    try testing.expectEqualStrings("1", result.bin_op[1].basic_lit[1]);
+    try testing.expectEqualStrings("2", result.bin_op[2].basic_lit[1]);
+}
+
+test "parse: subtraction" {
+    const result = try parse("5 - 3");
+    try testing.expect(result == .bin_op);
+    try testing.expectEqual(BinOpKind.minus, result.bin_op[0]);
+}
+
+test "parse: multiplication" {
+    const result = try parse("2 * 4");
+    try testing.expect(result == .bin_op);
+    try testing.expectEqual(BinOpKind.mult, result.bin_op[0]);
+}
+
+test "parse: mult binds tighter than plus" {
+    // 1 + 2 * 3 should parse as 1 + (2 * 3)
+    const result = try parse("1 + 2 * 3");
+    try testing.expect(result == .bin_op);
+    try testing.expectEqual(BinOpKind.plus, result.bin_op[0]);
+    try testing.expect(result.bin_op[2].* == .bin_op);
+    try testing.expectEqual(BinOpKind.mult, result.bin_op[2].bin_op[0]);
+}
+
+test "parse: plus is left-associative" {
+    // 1 + 2 + 3 should parse as (1 + 2) + 3
+    const result = try parse("1 + 2 + 3");
+    try testing.expect(result == .bin_op);
+    try testing.expectEqual(BinOpKind.plus, result.bin_op[0]);
+    try testing.expect(result.bin_op[1].* == .bin_op);
+    try testing.expectEqual(BinOpKind.plus, result.bin_op[1].bin_op[0]);
+}
