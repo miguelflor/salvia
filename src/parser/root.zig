@@ -51,6 +51,7 @@ const Expr = union(enum) {
 
 const Bp = struct { l: u8, r: u8 };
 
+// returns an expression tree, free whatever alloc uses, for example with arena
 pub fn parse(alloc: std.mem.Allocator, code: [:0]const u8) errors.ParseError!Expr {
     var lex = lexer.Lexer.init(code);
     return try expr_bp(alloc, &lex, 0);
