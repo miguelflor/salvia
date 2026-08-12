@@ -3,7 +3,7 @@ const testing = std.testing;
 
 const State = enum { start, identifier, less, greater, string, equal, int, int_dot, float };
 
-const TokenType = enum {
+pub const TokenType = enum {
     invalid,
     unclosed_string,
     // Single-character tokens.
@@ -15,9 +15,12 @@ const TokenType = enum {
     right_square,
     comma,
     dot,
+    semicolon,
+
+    // Ops
     minus,
     plus,
-    semicolon,
+    mult,
 
     // one or two character tokens.
     equal,
@@ -72,12 +75,12 @@ fn getKeywordToken(keyword: []const u8) ?TokenType {
     return keywordStr.get(keyword);
 }
 
-const Token = struct {
+pub const Token = struct {
     text: []const u8,
     type: TokenType,
 };
 
-const Lexer = struct {
+pub const Lexer = struct {
     code: [:0]const u8,
     pos: usize,
 
@@ -92,8 +95,7 @@ const Lexer = struct {
         const temp = self.pos;
         const token = self.next();
         self.pos = temp;
-        return  token;
-
+        return token;
     }
     pub fn next(self: *Lexer) Token {
         var text_start = self.pos;
@@ -163,6 +165,11 @@ const Lexer = struct {
                     },
                     '+' => {
                         token.type = .plus;
+                        self.pos += 1;
+                        text_end = self.pos;
+                    },
+                    '*' => {
+                        token.type = .mult;
                         self.pos += 1;
                         text_end = self.pos;
                     },
@@ -342,7 +349,7 @@ test "peek is equal to next" {
     while (true) {
         const peek = lexer.peek();
         const token = lexer.next();
-        try testing.expect(std.meta.eql(peek ,token));
+        try testing.expect(std.meta.eql(peek, token));
         if (token.type == .eof) {
             break;
         }
@@ -356,7 +363,7 @@ test "sum" {
     var list = try tokenize(testing.allocator, code);
     defer list.deinit(testing.allocator);
     try testing.expectEqualSlices(TokenType, &[_]TokenType{ .number, .plus, .number, .eof }, list.items(.type));
-    try testing.expectEqualDeep( &[_][]const u8{ "1", "+", "1", "" }, list.items(.text));
+    try testing.expectEqualDeep(&[_][]const u8{ "1", "+", "1", "" }, list.items(.text));
 }
 
 test "variable defenition" {
@@ -364,7 +371,7 @@ test "variable defenition" {
     var list = try tokenize(testing.allocator, code);
     defer list.deinit(testing.allocator);
     try testing.expectEqualSlices(TokenType, &[_]TokenType{ .keyword_let, .identifier, .equal, .number, .eof }, list.items(.type));
-    try testing.expectEqualDeep( &[_][]const u8{ "let", "foo", "=", "1", "" }, list.items(.text));
+    try testing.expectEqualDeep(&[_][]const u8{ "let", "foo", "=", "1", "" }, list.items(.text));
 }
 
 test "comparison operators" {
@@ -377,8 +384,8 @@ test "comparison operators" {
         .identifier,    .greater,     .identifier,
         .less,          .identifier,  .eof,
     }, list.items(.type));
-    try testing.expectEqualDeep( &[_][]const u8{
-        "a", "==", "b",
+    try testing.expectEqualDeep(&[_][]const u8{
+        "a",  "==", "b",
         ">=", "c",  "<=",
         "d",  ">",  "e",
         "<",  "f",  "",
@@ -390,7 +397,7 @@ test "string literal" {
     var list = try tokenize(testing.allocator, code);
     defer list.deinit(testing.allocator);
     try testing.expectEqualSlices(TokenType, &[_]TokenType{ .string_literal, .eof }, list.items(.type));
-    try testing.expectEqualDeep( &[_][]const u8{ "\"hello\"", "" }, list.items(.text));
+    try testing.expectEqualDeep(&[_][]const u8{ "\"hello\"", "" }, list.items(.text));
 }
 
 test "float number" {
@@ -398,7 +405,7 @@ test "float number" {
     var list = try tokenize(testing.allocator, code);
     defer list.deinit(testing.allocator);
     try testing.expectEqualSlices(TokenType, &[_]TokenType{ .number, .eof }, list.items(.type));
-    try testing.expectEqualDeep( &[_][]const u8{ "3.14", "" }, list.items(.text));
+    try testing.expectEqualDeep(&[_][]const u8{ "3.14", "" }, list.items(.text));
 }
 
 test "punctuation" {
@@ -412,7 +419,7 @@ test "punctuation" {
         .comma,       .dot,
         .semicolon,   .eof,
     }, list.items(.type));
-    try testing.expectEqualDeep( &[_][]const u8{
+    try testing.expectEqualDeep(&[_][]const u8{
         "(", ")", "{", "}", "[", "]", ",", ".", ";", "",
     }, list.items(.text));
 }
@@ -426,7 +433,7 @@ test "keywords" {
         .keyword_for, .keyword_return, .keyword_fun,
         .eof,
     }, list.items(.type));
-    try testing.expectEqualDeep( &[_][]const u8{
+    try testing.expectEqualDeep(&[_][]const u8{
         "if", "else", "while", "for", "return", "fun", "",
     }, list.items(.text));
 }
@@ -436,7 +443,7 @@ test "empty input" {
     var list = try tokenize(testing.allocator, code);
     defer list.deinit(testing.allocator);
     try testing.expectEqualSlices(TokenType, &[_]TokenType{.eof}, list.items(.type));
-    try testing.expectEqualDeep( &[_][]const u8{""}, list.items(.text));
+    try testing.expectEqualDeep(&[_][]const u8{""}, list.items(.text));
 }
 
 test "arithmetic operators" {
@@ -446,7 +453,7 @@ test "arithmetic operators" {
     try testing.expectEqualSlices(TokenType, &[_]TokenType{
         .number, .plus, .number, .minus, .number, .eof,
     }, list.items(.type));
-    try testing.expectEqualDeep( &[_][]const u8{ "1", "+", "2", "-", "3", "" }, list.items(.text));
+    try testing.expectEqualDeep(&[_][]const u8{ "1", "+", "2", "-", "3", "" }, list.items(.text));
 }
 
 test "function call" {
@@ -457,7 +464,7 @@ test "function call" {
         .identifier, .left_paren,  .identifier, .comma,
         .identifier, .right_paren, .semicolon,  .eof,
     }, list.items(.type));
-    try testing.expectEqualDeep( &[_][]const u8{
+    try testing.expectEqualDeep(&[_][]const u8{
         "foo", "(", "a", ",", "b", ")", ";", "",
     }, list.items(.text));
 }
@@ -469,5 +476,5 @@ test "boolean keywords" {
     try testing.expectEqualSlices(TokenType, &[_]TokenType{
         .keyword_true, .keyword_false, .keyword_and, .keyword_or, .eof,
     }, list.items(.type));
-    try testing.expectEqualDeep( &[_][]const u8{ "true", "false", "and", "or", "" }, list.items(.text));
+    try testing.expectEqualDeep(&[_][]const u8{ "true", "false", "and", "or", "" }, list.items(.text));
 }
