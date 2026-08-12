@@ -1,4 +1,5 @@
 const lexer = @import("lexer");
+const std = @import("std");
 const errors = @import("errors");
 
 const BinOpKind = enum {
@@ -21,15 +22,30 @@ const BinOpKind = enum {
             .minus => return .minus,
             .plus => return .plus,
             .mult => return .mult,
-            else => return error.NotImplemented,
+            else => return error.NotBinaryOp,
+        }
+    }
+};
+
+const BasicLitType = enum {
+    float,
+    string,
+    int,
+
+    fn FromToken(token: lexer.Token) errors.ParseError!BasicLitType {
+        switch (token.type) {
+            .number => {
+                std.mem.indexOfScalar(u8, token.text, '.') orelse return .int;
+                return .float;
+            },
+            .string_literal => return .string,
+            else => return error.NotBasicLit,
         }
     }
 };
 
 const Expr = union(enum) {
-    number: f16,
-    string: []const u8,
-    bool: bool,
+    basic_lit: struct { BasicLitType, []const u8 },
     bin_op: struct { BinOpKind, *Expr, *Expr },
 };
 
@@ -41,10 +57,10 @@ pub fn parse(code: [:0]const u8) errors.ParseError!Expr {
 }
 
 fn expr_bp(lex: *lexer.Lexer, min_bp: u8) errors.ParseError!Expr {
-    const nextToken = lex.next();
-    var lhs = switch (nextToken.type) {
+    const token = lex.next();
+    var lhs = switch (token.type) {
         .number => {
-            return Expr.number;
+            return .{ .basic_lit = .{ BasicLitType.FromToken(token), token.text } };
         },
         else => {
             return error.UnexpectedToken;
@@ -66,9 +82,9 @@ fn expr_bp(lex: *lexer.Lexer, min_bp: u8) errors.ParseError!Expr {
             break;
         }
         lexer.next();
-        const rhs =  expr_bp(lex, bp.r);
+        const rhs = expr_bp(lex, bp.r);
 
-        lhs = .{.bin_op = .{op, lhs, rhs}};
+        lhs = .{ .bin_op = .{ op, lhs, rhs } };
     }
 
     return lhs;
