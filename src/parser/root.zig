@@ -13,39 +13,39 @@ const BinOpKind = enum {
     mult,
 
     fn FromToken(token: lexer.TokenType) errors.ParseError!BinOpKind {
-        switch (token) {
-            .equal => return .equal,
-            .greater => return .greater,
-            .greater_equal => return .greater_equal,
-            .less => return .less,
-            .less_equal => return .less_equal,
-            .minus => return .minus,
-            .plus => return .plus,
-            .mult => return .mult,
-            else => return error.NotBinaryOp,
-        }
+        return switch (token) {
+            .equal => .equal,
+            .greater => .greater,
+            .greater_equal => .greater_equal,
+            .less => .less,
+            .less_equal => .less_equal,
+            .minus => .minus,
+            .plus => .plus,
+            .mult => .mult,
+            else => error.NotBinaryOp,
+        };
     }
 };
 
-const BasicLitType = enum {
+const BasicLitKind = enum {
     float,
     string,
     int,
 
-    fn FromToken(token: lexer.Token) errors.ParseError!BasicLitType {
-        switch (token.type) {
+    fn FromToken(token: lexer.Token) errors.ParseError!BasicLitKind {
+        return switch (token.type) {
             .number => {
                 _ = std.mem.indexOfScalar(u8, token.text, '.') orelse return .int;
                 return .float;
             },
-            .string_literal => return .string,
-            else => return error.NotBasicLit,
-        }
+            .string_literal => .string,
+            else => error.NotBasicLit,
+        };
     }
 };
 
 const Expr = union(enum) {
-    basic_lit: struct { BasicLitType, []const u8 },
+    basic_lit: struct { BasicLitKind, []const u8 },
     bin_op: struct { BinOpKind, *Expr, *Expr },
 };
 
@@ -58,31 +58,27 @@ pub fn parse(code: [:0]const u8) errors.ParseError!Expr {
 
 fn expr_bp(lex: *lexer.Lexer, min_bp: u8) errors.ParseError!Expr {
     const token = lex.next();
-    var lhs = switch (token.type) {
-        .number => {
-            return .{ .basic_lit = .{ try BasicLitType.FromToken(token), token.text } };
-        },
-        else => {
-            return error.UnexpectedToken;
-        },
+    var lhs = try switch (token.type) {
+        .number => .{ .basic_lit = .{ try BasicLitKind.FromToken(token), token.text } },
+        else => error.UnexpectedToken,
     };
 
     while (true) {
         const peek = lex.peek();
+        std.debug.print("{any}\n", .{peek});
         const op = try switch (peek.type) {
             .eof => break,
-            .minus, .plus, .mult => |t| {
-                return BinOpKind.FromToken(t);
-            },
+            .minus, .plus, .mult => |t| return BinOpKind.FromToken(t),
             else => return error.NotImplemented,
         };
 
         const bp = try infix_bp(op);
+        std.debug.print("{any}\n", .{bp});
         if (bp.l < min_bp) {
             break;
         }
         lexer.next();
-        const rhs = expr_bp(lex, bp.r);
+        const rhs = expr_bp(&lex, bp.r);
 
         lhs = .{ .bin_op = .{ op, lhs, rhs } };
     }
@@ -94,9 +90,7 @@ fn infix_bp(op: BinOpKind) errors.ParseError!Bp {
     switch (op) {
         .minus, .plus => Bp{ 1, 2 },
         .mult => Bp{ 3, 4 },
-        else => {
-            return error.NotImplemented;
-        },
+        else => error.NotImplemented,
     }
 }
 
@@ -105,20 +99,21 @@ const testing = std.testing;
 test "parse: single integer" {
     const result = try parse("42");
     try testing.expect(result == .basic_lit);
-    try testing.expectEqual(BasicLitType.int, result.basic_lit[0]);
+    try testing.expectEqual(BasicLitKind.int, result.basic_lit[0]);
     try testing.expectEqualStrings("42", result.basic_lit[1]);
 }
 
 test "parse: single float" {
     const result = try parse("3.14");
     try testing.expect(result == .basic_lit);
-    try testing.expectEqual(BasicLitType.float, result.basic_lit[0]);
+    try testing.expectEqual(BasicLitKind.float, result.basic_lit[0]);
     try testing.expectEqualStrings("3.14", result.basic_lit[1]);
 }
 
 test "parse: addition" {
     const result = try parse("1 + 2");
-    std.debug.print("{any}", .{result});
+    std.debug.print("{any}\n", .{result});
+    std.debug.print("{any}\n", .{1});
     try testing.expect(result == .bin_op);
     try testing.expectEqual(BinOpKind.plus, result.bin_op[0]);
     try testing.expectEqualStrings("1", result.bin_op[1].basic_lit[1]);
