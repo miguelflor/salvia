@@ -51,69 +51,75 @@ const Expr = union(enum) {
 
 const Bp = struct { l: u8, r: u8 };
 
-pub fn parse(code: [:0]const u8) errors.ParseError!Expr {
+pub fn parse(alloc: std.mem.Allocator, code: [:0]const u8) errors.ParseError!Expr {
     var lex = lexer.Lexer.init(code);
-    return try expr_bp(&lex, 0);
+    return try expr_bp(alloc, &lex, 0);
 }
 
-fn expr_bp(lex: *lexer.Lexer, min_bp: u8) errors.ParseError!Expr {
+fn expr_bp(alloc: std.mem.Allocator, lex: *lexer.Lexer, min_bp: u8) errors.ParseError!Expr {
     const token = lex.next();
-    var lhs = try switch (token.type) {
-        .number => .{ .basic_lit = .{ try BasicLitKind.FromToken(token), token.text } },
+    var lhs: Expr = try switch (token.type) {
+        .number => Expr{ .basic_lit = .{ try BasicLitKind.FromToken(token), token.text } },
         else => error.UnexpectedToken,
     };
 
     while (true) {
         const peek = lex.peek();
-        std.debug.print("{any}\n", .{peek});
         const op = try switch (peek.type) {
             .eof => break,
-            .minus, .plus, .mult => |t| return BinOpKind.FromToken(t),
+            .minus, .plus, .mult => BinOpKind.FromToken(peek.type),
             else => return error.NotImplemented,
         };
 
         const bp = try infix_bp(op);
-        std.debug.print("{any}\n", .{bp});
         if (bp.l < min_bp) {
             break;
         }
-        lexer.next();
-        const rhs = expr_bp(&lex, bp.r);
+        _ = lex.next();
+        const rhs_node = try alloc.create(Expr);
+        rhs_node.* = try expr_bp(alloc,lex, bp.r);
 
-        lhs = .{ .bin_op = .{ op, lhs, rhs } };
+        const lhs_node = try alloc.create(Expr);
+        lhs_node.* = lhs;
+
+        lhs = .{ .bin_op = .{ op, lhs_node, rhs_node } };
     }
 
     return lhs;
 }
 
 fn infix_bp(op: BinOpKind) errors.ParseError!Bp {
-    switch (op) {
-        .minus, .plus => Bp{ 1, 2 },
-        .mult => Bp{ 3, 4 },
+    return switch (op) {
+        .minus, .plus => Bp{ .l = 1, .r = 2 },
+        .mult => Bp{ .l = 3, .r = 4 },
         else => error.NotImplemented,
-    }
+    };
 }
 
 const testing = std.testing;
 
 test "parse: single integer" {
-    const result = try parse("42");
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const result = try parse(arena.allocator(), "42");
     try testing.expect(result == .basic_lit);
     try testing.expectEqual(BasicLitKind.int, result.basic_lit[0]);
     try testing.expectEqualStrings("42", result.basic_lit[1]);
 }
 
 test "parse: single float" {
-    const result = try parse("3.14");
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const result = try parse(arena.allocator(), "3.14");
     try testing.expect(result == .basic_lit);
     try testing.expectEqual(BasicLitKind.float, result.basic_lit[0]);
     try testing.expectEqualStrings("3.14", result.basic_lit[1]);
 }
 
 test "parse: addition" {
-    const result = try parse("1 + 2");
-    std.debug.print("{any}\n", .{result});
-    std.debug.print("{any}\n", .{1});
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const result = try parse(arena.allocator(), "1 + 2");
     try testing.expect(result == .bin_op);
     try testing.expectEqual(BinOpKind.plus, result.bin_op[0]);
     try testing.expectEqualStrings("1", result.bin_op[1].basic_lit[1]);
@@ -121,20 +127,25 @@ test "parse: addition" {
 }
 
 test "parse: subtraction" {
-    const result = try parse("5 - 3");
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const result = try parse(arena.allocator(), "5 - 3");
     try testing.expect(result == .bin_op);
     try testing.expectEqual(BinOpKind.minus, result.bin_op[0]);
 }
 
 test "parse: multiplication" {
-    const result = try parse("2 * 4");
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const result = try parse(arena.allocator(), "2 * 4");
     try testing.expect(result == .bin_op);
     try testing.expectEqual(BinOpKind.mult, result.bin_op[0]);
 }
 
 test "parse: mult binds tighter than plus" {
-    // 1 + 2 * 3 should parse as 1 + (2 * 3)
-    const result = try parse("1 + 2 * 3");
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const result = try parse(arena.allocator(), "1 + 2 * 3");
     try testing.expect(result == .bin_op);
     try testing.expectEqual(BinOpKind.plus, result.bin_op[0]);
     try testing.expect(result.bin_op[2].* == .bin_op);
@@ -142,8 +153,9 @@ test "parse: mult binds tighter than plus" {
 }
 
 test "parse: plus is left-associative" {
-    // 1 + 2 + 3 should parse as (1 + 2) + 3
-    const result = try parse("1 + 2 + 3");
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const result = try parse(arena.allocator(), "1 + 2 + 3");
     try testing.expect(result == .bin_op);
     try testing.expectEqual(BinOpKind.plus, result.bin_op[0]);
     try testing.expect(result.bin_op[1].* == .bin_op);
