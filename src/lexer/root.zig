@@ -29,6 +29,7 @@ pub const TokenType = enum {
     greater_equal,
     less,
     less_equal,
+    diff,
 
     // literals
     identifier,
@@ -207,6 +208,11 @@ pub const Lexer = struct {
                         self.pos += 1;
                         token.type = .less;
                         continue :state .less;
+                    },
+                    '!' => {
+                        self.pos += 1;
+                        token.type = .diff;
+                        continue :state .diff;
                     },
                     '"' => {
                         self.pos += 1;

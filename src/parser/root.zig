@@ -27,6 +27,19 @@ const BinOpKind = enum {
     }
 };
 
+const UniOpKind = enum {
+    minus,
+    Adiff,
+
+    fn FromToken(token: lexer.TokenType) errors.ParseError!UniOpKind {
+        return switch (token) {
+            .minus => .minus,
+            .diff => .diff,
+            else => error.NotUnaryOp,
+        };
+    }
+};
+
 const BasicLitKind = enum {
     float,
     string,
@@ -44,10 +57,7 @@ const BasicLitKind = enum {
     }
 };
 
-const Expr = union(enum) {
-    basic_lit: struct { BasicLitKind, []const u8 },
-    bin_op: struct { BinOpKind, *Expr, *Expr },
-};
+const Expr = union(enum) { basic_lit: struct { BasicLitKind, []const u8 }, bin_op: struct { BinOpKind, *Expr, *Expr }, uni_op: struct { UniOpKind, *Expr } };
 
 const Bp = struct { l: u8, r: u8 };
 
@@ -61,6 +71,11 @@ fn expr_bp(alloc: std.mem.Allocator, lex: *lexer.Lexer, min_bp: u8) errors.Parse
     const token = lex.next();
     var lhs: Expr = try switch (token.type) {
         .number => Expr{ .basic_lit = .{ try BasicLitKind.FromToken(token), token.text } },
+        .minus => blk: {
+            const bp = try prefix_bp(token.type);
+            const rhs = try expr_bp(alloc, lex, bp.r);
+            break :blk Expr{ .uni_op = .{ try UniOpKind.FromToken(token), rhs } };
+        },
         else => error.UnexpectedToken,
     };
 
@@ -72,28 +87,32 @@ fn expr_bp(alloc: std.mem.Allocator, lex: *lexer.Lexer, min_bp: u8) errors.Parse
             else => return error.NotImplemented,
         };
 
-        const bp = try infix_bp(op);
+        const bp = try infix_bp(peek.type);
         if (bp.l < min_bp) {
             break;
         }
         _ = lex.next();
         const rhs_node = try alloc.create(Expr);
-        rhs_node.* = try expr_bp(alloc,lex, bp.r);
+        rhs_node.* = try expr_bp(alloc, lex, bp.r);
 
         const lhs_node = try alloc.create(Expr);
         lhs_node.* = lhs;
-
         lhs = .{ .bin_op = .{ op, lhs_node, rhs_node } };
     }
-
     return lhs;
 }
+fn prefix_bp(op: lexer.TokenType) errors.ParseError!Bp {
+    return switch (op) {
+        .minus => Bp{ .l = undefined, .r = 5 },
+        else => error.UnexpectedToken,
+    };
+}
 
-fn infix_bp(op: BinOpKind) errors.ParseError!Bp {
+fn infix_bp(op: lexer.TokenType) errors.ParseError!Bp {
     return switch (op) {
         .minus, .plus => Bp{ .l = 1, .r = 2 },
         .mult => Bp{ .l = 3, .r = 4 },
-        else => error.NotImplemented,
+        else => error.UnexpectedToken,
     };
 }
 
