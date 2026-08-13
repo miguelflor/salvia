@@ -29,7 +29,7 @@ const BinOpKind = enum {
 
 const UniOpKind = enum {
     minus,
-    Adiff,
+    diff,
 
     fn FromToken(token: lexer.TokenType) errors.ParseError!UniOpKind {
         return switch (token) {
