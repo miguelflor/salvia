@@ -84,25 +84,32 @@ pub const Token = struct {
 pub const Lexer = struct {
     code: [:0]const u8,
     pos: usize,
-    token_peaked: ?Token,
+    peaked: ?struct { token: Token, pos: usize },
 
     pub fn init(code: [:0]const u8) Lexer {
         return Lexer{
             .code = code,
             .pos = 0,
+            .peaked = null,
         };
     }
 
     pub fn peek(self: *Lexer) Token {
-        if (self.token_peaked) |token| return token;
+        if (self.peaked) |peaked| return peaked.token;
         const temp = self.pos;
         const token = self.next();
-        self.token_peaked = token;
+        self.peaked = .{ .token = token, .pos = self.pos };
         self.pos = temp;
         return token;
     }
     pub fn next(self: *Lexer) Token {
-        if (self.token_peaked) |token| return token;
+        if (self.peaked) |peaked| {
+            const tmp = peaked.token;
+            self.peaked = null;
+            self.pos = peaked.pos;
+            return tmp;
+        }
+
         var text_start = self.pos;
         var text_end: usize = undefined;
 
