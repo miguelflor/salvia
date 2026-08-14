@@ -126,7 +126,7 @@ fn expr_bp(alloc: std.mem.Allocator, lex: *lexer.Lexer, min_bp: u8) errors.Parse
 
 fn postfix_bp(op: lexer.TokenType) errors.ParseError!Bp {
     return switch (op) {
-        .minus => Bp{ .l = 6, .r = undefined },
+        .diff => Bp{ .l = 6, .r = undefined },
         else => error.UnexpectedToken,
     };
 }
@@ -210,4 +210,17 @@ test "parse: plus is left-associative" {
     try testing.expectEqual(BinOpKind.plus, result.bin_op[0]);
     try testing.expect(result.bin_op[1].* == .bin_op);
     try testing.expectEqual(BinOpKind.plus, result.bin_op[1].bin_op[0]);
+}
+
+test "parse: postfix ! binds tighter than +" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    // 2 + 3! should parse as 2 + (3!), not (2 + 3)!
+    const result = try parse(arena.allocator(), "2 + 3!");
+    try testing.expect(result == .bin_op);
+    try testing.expectEqual(BinOpKind.plus, result.bin_op[0]);
+    try testing.expectEqualStrings("2", result.bin_op[1].basic_lit[1]);
+    try testing.expect(result.bin_op[2].* == .uni_op);
+    try testing.expectEqual(UniOpKind.diff, result.bin_op[2].uni_op[0]);
+    try testing.expectEqualStrings("3", result.bin_op[2].uni_op[1].basic_lit[1]);
 }
