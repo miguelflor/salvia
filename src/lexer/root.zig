@@ -210,9 +210,9 @@ pub const Lexer = struct {
                         continue :state .less;
                     },
                     '!' => {
-                        self.pos += 1;
                         token.type = .diff;
-                        continue :state .diff;
+                        self.pos += 1;
+                        text_end = self.pos;
                     },
                     '"' => {
                         self.pos += 1;
