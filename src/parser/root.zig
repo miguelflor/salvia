@@ -83,13 +83,20 @@ fn expr_bp(alloc: std.mem.Allocator, lex: *lexer.Lexer, min_bp: u8) errors.Parse
                     rhs.* = try expr_bp(alloc, lex, bp.r);
                     break :blk Expr{ .uni_op = .{ try UniOpKind.FromToken(token.type), rhs } };
                 },
+                .left_paren => blk: {
+                    const rhs = try expr_bp(alloc, lex, 0);
+                    const t = lex.next();
+                    if (t.type != .right_paren) return error.ExpectedRParen;
+                    break :blk rhs;
+
+                },
                 else => error.UnexpectedToken,
             };
             continue :state .loop;
         },
         .loop => {
             switch (lex.peek().type) {
-                .eof => return lhs,
+                .eof, .right_paren => return lhs,
                 .minus, .plus, .mult => continue :state .bin_op,
                 .diff => continue :state .post_uni_op,
                 else => return error.NotImplemented,
@@ -210,6 +217,29 @@ test "parse: plus is left-associative" {
     try testing.expectEqual(BinOpKind.plus, result.bin_op[0]);
     try testing.expect(result.bin_op[1].* == .bin_op);
     try testing.expectEqual(BinOpKind.plus, result.bin_op[1].bin_op[0]);
+}
+
+test "parse: parenthesized expression" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const result = try parse(arena.allocator(), "(42)");
+    try testing.expect(result == .basic_lit);
+    try testing.expectEqual(BasicLitKind.int, result.basic_lit[0]);
+    try testing.expectEqualStrings("42", result.basic_lit[1]);
+}
+
+test "parse: parens override precedence" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    // (1 + 2) * 3 should parse as (* (+ 1 2) 3), not (+ 1 (* 2 3))
+    const result = try parse(arena.allocator(), "(1 + 2) * 3");
+    try testing.expect(result == .bin_op);
+    try testing.expectEqual(BinOpKind.mult, result.bin_op[0]);
+    try testing.expect(result.bin_op[1].* == .bin_op);
+    try testing.expectEqual(BinOpKind.plus, result.bin_op[1].bin_op[0]);
+    try testing.expectEqualStrings("1", result.bin_op[1].bin_op[1].basic_lit[1]);
+    try testing.expectEqualStrings("2", result.bin_op[1].bin_op[2].basic_lit[1]);
+    try testing.expectEqualStrings("3", result.bin_op[2].basic_lit[1]);
 }
 
 test "parse: postfix ! binds tighter than +" {
