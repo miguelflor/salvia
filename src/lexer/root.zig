@@ -1,7 +1,7 @@
 const std = @import("std");
 const testing = std.testing;
 
-const State = enum { start, identifier, less, greater, string, equal, int, int_dot, float, not_diff };
+const State = enum { start, identifier, less, greater, string, equal, int, int_dot, float, not_diff, backslash, slash };
 
 pub const TokenType = enum {
     invalid,
@@ -31,6 +31,8 @@ pub const TokenType = enum {
     less_equal,
     not,
     diff,
+    and_op,
+    or_op,
 
     // literals
     identifier,
@@ -38,7 +40,6 @@ pub const TokenType = enum {
     number,
 
     // keywords.
-    keyword_and,
     keyword_struct,
     keyword_else,
     keyword_false,
@@ -46,7 +47,6 @@ pub const TokenType = enum {
     keyword_for,
     keyword_if,
     keyword_nil,
-    keyword_or,
     keyword_return,
     keyword_this,
     keyword_true,
@@ -57,7 +57,6 @@ pub const TokenType = enum {
 };
 
 const keywordStr = std.StaticStringMap(TokenType).initComptime(.{
-    .{ "and", .keyword_and },
     .{ "struct", .keyword_struct },
     .{ "else", .keyword_else },
     .{ "false", .keyword_false },
@@ -65,7 +64,6 @@ const keywordStr = std.StaticStringMap(TokenType).initComptime(.{
     .{ "for", .keyword_for },
     .{ "if", .keyword_if },
     .{ "nil", .keyword_nil },
-    .{ "or", .keyword_or },
     .{ "return", .keyword_return },
     .{ "this", .keyword_this },
     .{ "true", .keyword_true },
@@ -206,6 +204,14 @@ pub const Lexer = struct {
                         self.pos += 1;
                         text_end = self.pos;
                     },
+                    '\\' => {
+                        self.pos += 1;
+                        continue :state .backslash;
+                    },
+                    '/' => {
+                        self.pos += 1;
+                        continue :state .slash;
+                    },
                     '=' => {
                         self.pos += 1;
                         token.type = .equal;
@@ -343,6 +349,30 @@ pub const Lexer = struct {
                         text_end = self.pos;
                     },
                 }
+            },
+            .backslash => {
+                switch (self.code[self.pos]) {
+                    '/' => {
+                        self.pos += 1;
+                        token.type = .or_op;
+                    },
+                    else => {
+                        token.type = .invalid;
+                    },
+                }
+                text_end = self.pos;
+            },
+            .slash => {
+                switch (self.code[self.pos]) {
+                    '\\' => {
+                        self.pos += 1;
+                        token.type = .and_op;
+                    },
+                    else => {
+                        token.type = .invalid;
+                    },
+                }
+                text_end = self.pos;
             },
         }
 
@@ -497,12 +527,12 @@ test "function call" {
     }, list.items(.text));
 }
 
-test "boolean keywords" {
-    const code: [:0]const u8 = "true false and or";
+test "boolean operators" {
+    const code: [:0]const u8 = "true \\/ false /\\";
     var list = try tokenize(testing.allocator, code);
     defer list.deinit(testing.allocator);
     try testing.expectEqualSlices(TokenType, &[_]TokenType{
-        .keyword_true, .keyword_false, .keyword_and, .keyword_or, .eof,
+        .keyword_true, .or_op, .keyword_false, .and_op, .eof,
     }, list.items(.type));
-    try testing.expectEqualDeep(&[_][]const u8{ "true", "false", "and", "or", "" }, list.items(.text));
+    try testing.expectEqualDeep(&[_][]const u8{ "true", "\\/", "false", "/\\", "" }, list.items(.text));
 }
