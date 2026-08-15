@@ -61,7 +61,7 @@ const Expr = union(enum) { basic_lit: struct { BasicLitKind, []const u8 }, bin_o
 
 const Bp = struct { l: u8, r: u8 };
 
-const State = enum { start, bin_op, post_uni_op };
+const State = enum { prefix, loop, bin_op, post_uni_op };
 
 // returns an expression tree, free whatever alloc uses, for example with arena
 pub fn parse(alloc: std.mem.Allocator, code: [:0]const u8) errors.ParseError!Expr {
@@ -70,58 +70,58 @@ pub fn parse(alloc: std.mem.Allocator, code: [:0]const u8) errors.ParseError!Exp
 }
 
 fn expr_bp(alloc: std.mem.Allocator, lex: *lexer.Lexer, min_bp: u8) errors.ParseError!Expr {
-    const token = lex.next();
-    var lhs: Expr = try switch (token.type) {
-        .number => Expr{ .basic_lit = .{ try BasicLitKind.FromToken(token), token.text } },
-        .minus => blk: {
-            const bp = try prefix_bp(token.type);
-            const rhs = try alloc.create(Expr);
-            rhs.* = try expr_bp(alloc, lex, bp.r);
-            break :blk Expr{ .uni_op = .{ try UniOpKind.FromToken(token.type), rhs } };
+    var lhs: Expr = undefined;
+
+    state: switch (State.prefix) {
+        .prefix => {
+            const token = lex.next();
+            lhs = try switch (token.type) {
+                .number => Expr{ .basic_lit = .{ try BasicLitKind.FromToken(token), token.text } },
+                .minus => blk: {
+                    const bp = try prefix_bp(token.type);
+                    const rhs = try alloc.create(Expr);
+                    rhs.* = try expr_bp(alloc, lex, bp.r);
+                    break :blk Expr{ .uni_op = .{ try UniOpKind.FromToken(token.type), rhs } };
+                },
+                else => error.UnexpectedToken,
+            };
+            continue :state .loop;
         },
-        else => error.UnexpectedToken,
-    };
+        .loop => {
+            switch (lex.peek().type) {
+                .eof => return lhs,
+                .minus, .plus, .mult => continue :state .bin_op,
+                .diff => continue :state .post_uni_op,
+                else => return error.NotImplemented,
+            }
+        },
+        .bin_op => {
+            const peek = lex.peek();
+            const op = try BinOpKind.FromToken(peek.type);
+            const bp = try infix_bp(peek.type);
+            if (bp.l < min_bp) return lhs;
 
-    while (true) {
-        const peek = lex.peek();
+            _ = lex.next();
+            const rhs_node = try alloc.create(Expr);
+            rhs_node.* = try expr_bp(alloc, lex, bp.r);
+            const lhs_node = try alloc.create(Expr);
+            lhs_node.* = lhs;
+            lhs = .{ .bin_op = .{ op, lhs_node, rhs_node } };
+            continue :state .loop;
+        },
+        .post_uni_op => {
+            const peek = lex.peek();
+            const op = try UniOpKind.FromToken(peek.type);
+            const bp = try postfix_bp(peek.type);
+            if (bp.l < min_bp) return lhs;
 
-        state: switch (State.start) {
-            .start => {
-                switch (peek.type) {
-                    .eof => break,
-                    .minus, .plus, .mult => continue :state State.bin_op,
-                    .diff => continue :state State.post_uni_op,
-                    else => return error.NotImplemented,
-                }
-            },
-            .bin_op => {
-                const op = try BinOpKind.FromToken(peek.type);
-                const bp = try infix_bp(peek.type);
-                if (bp.l < min_bp) {
-                    break;
-                }
-                _ = lex.next();
-                const rhs_node = try alloc.create(Expr);
-                rhs_node.* = try expr_bp(alloc, lex, bp.r);
-
-                const lhs_node = try alloc.create(Expr);
-                lhs_node.* = lhs;
-                lhs = .{ .bin_op = .{ op, lhs_node, rhs_node } };
-            },
-            .post_uni_op => {
-                const op = try UniOpKind.FromToken(peek.type);
-                const bp = try postfix_bp(peek.type);
-                if (bp.l < min_bp) {
-                    break;
-                }
-                _ = lex.next();
-                const lhs_node = try alloc.create(Expr);
-                lhs_node.* = lhs;
-                lhs = .{ .uni_op = .{ op, lhs_node } };
-            },
-        }
+            _ = lex.next();
+            const lhs_node = try alloc.create(Expr);
+            lhs_node.* = lhs;
+            lhs = .{ .uni_op = .{ op, lhs_node } };
+            continue :state .loop;
+        },
     }
-    return lhs;
 }
 
 fn postfix_bp(op: lexer.TokenType) errors.ParseError!Bp {
