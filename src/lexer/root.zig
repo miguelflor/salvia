@@ -1,7 +1,7 @@
 const std = @import("std");
 const testing = std.testing;
 
-const State = enum { start, identifier, less, greater, string, equal, int, int_dot, float };
+const State = enum { start, identifier, less, greater, string, equal, int, int_dot, float, not_diff };
 
 pub const TokenType = enum {
     invalid,
@@ -29,6 +29,7 @@ pub const TokenType = enum {
     greater_equal,
     less,
     less_equal,
+    not,
     diff,
 
     // literals
@@ -221,9 +222,9 @@ pub const Lexer = struct {
                         continue :state .less;
                     },
                     '!' => {
-                        token.type = .diff;
+                        token.type = .not;
                         self.pos += 1;
-                        text_end = self.pos;
+                        continue :state .not_diff;
                     },
                     '"' => {
                         self.pos += 1;
@@ -236,6 +237,16 @@ pub const Lexer = struct {
                         token.type = .invalid;
                     },
                 }
+            },
+            .not_diff => {
+                switch (self.code[self.pos]) {
+                    '=' => {
+                        self.pos += 1;
+                        token.type = .diff;
+                    },
+                    else => {},
+                }
+                text_end = self.pos;
             },
             .equal => {
                 switch (self.code[self.pos]) {

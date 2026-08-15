@@ -29,12 +29,12 @@ const BinOpKind = enum {
 
 const UniOpKind = enum {
     minus,
-    diff,
+    not,
 
     fn FromToken(token: lexer.TokenType) errors.ParseError!UniOpKind {
         return switch (token) {
             .minus => .minus,
-            .diff => .diff,
+            .not => .not,
             else => error.NotUnaryOp,
         };
     }
@@ -98,7 +98,7 @@ fn expr_bp(alloc: std.mem.Allocator, lex: *lexer.Lexer, min_bp: u8) errors.Parse
             switch (lex.peek().type) {
                 .eof, .right_paren => return lhs,
                 .minus, .plus, .mult => continue :state .bin_op,
-                .diff => continue :state .post_uni_op,
+                .not => continue :state .post_uni_op,
                 else => return error.NotImplemented,
             }
         },
@@ -133,7 +133,7 @@ fn expr_bp(alloc: std.mem.Allocator, lex: *lexer.Lexer, min_bp: u8) errors.Parse
 
 fn postfix_bp(op: lexer.TokenType) errors.ParseError!Bp {
     return switch (op) {
-        .diff => Bp{ .l = 6, .r = undefined },
+        .not => Bp{ .l = 6, .r = undefined },
         else => error.UnexpectedToken,
     };
 }
@@ -251,6 +251,6 @@ test "parse: postfix ! binds tighter than +" {
     try testing.expectEqual(BinOpKind.plus, result.bin_op[0]);
     try testing.expectEqualStrings("2", result.bin_op[1].basic_lit[1]);
     try testing.expect(result.bin_op[2].* == .uni_op);
-    try testing.expectEqual(UniOpKind.diff, result.bin_op[2].uni_op[0]);
+    try testing.expectEqual(UniOpKind.not, result.bin_op[2].uni_op[0]);
     try testing.expectEqualStrings("3", result.bin_op[2].uni_op[1].basic_lit[1]);
 }
