@@ -59,7 +59,7 @@ const BasicLitKind = enum {
     }
 };
 
-const IfExpr = struct { cond: *Expr, body: *Expr };
+const Clause = struct { cond: *Expr, body: *Expr };
 
 const Expr = union(enum) {
     seq: struct { a: *Expr, b: *Expr },
@@ -74,8 +74,8 @@ const Expr = union(enum) {
         operand: *Expr,
     },
     if_expr: struct {
-        head: IfExpr,
-        elseifs: []const IfExpr,
+        head: Clause,
+        elseifs: []const Clause,
         else_body: ?*Expr,
     },
 };
@@ -188,7 +188,7 @@ fn infix_bp(op: lexer.TokenType) errors.ParseError!Bp {
 fn parse_if(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Expr {
     const first_if = try parse_if_cond_body(alloc, lex);
 
-    var elseifs: std.ArrayList(IfExpr) = .empty;
+    var elseifs: std.ArrayList(Clause) = .empty;
     defer elseifs.deinit(alloc);
 
     while (.keyword_elif == lex.peek().type) {
@@ -211,7 +211,7 @@ fn parse_if(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Expr 
     return Expr{ .seq = .{ .a = if_expr, .b = rest } };
 }
 
-fn parse_if_cond_body(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!IfExpr {
+fn parse_if_cond_body(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Clause {
     var t = lex.next();
     if (t.type != .left_paren) return error.ExpectedRParen;
     const cond = try alloc.create(Expr);
@@ -221,7 +221,7 @@ fn parse_if_cond_body(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseE
 
     const body = try parse_body(alloc, lex);
 
-    return IfExpr{ .cond = cond, .body = body };
+    return Clause{ .cond = cond, .body = body };
 }
 
 fn parse_body(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!*Expr {
