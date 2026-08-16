@@ -1,1 +1,12 @@
-pub const ParseError = error{ NotImplemented, UnexpectedToken, NotBinaryOp, NotBasicLit, OutOfMemory, NotUnaryOp, ExpectedRParen };
+pub const ParseError = error{
+    NotImplemented,
+    UnexpectedToken,
+    NotBinaryOp,
+    NotBasicLit,
+    OutOfMemory,
+    NotUnaryOp,
+    ExpectedRParen,
+    ExpectedRBrace,
+    ExpectedLBrace,
+    ExpectedLParen,
+};
