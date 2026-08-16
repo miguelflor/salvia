@@ -62,11 +62,22 @@ const BasicLitKind = enum {
 const IfExpr = struct { cond: *Expr, body: *Expr };
 
 const Expr = union(enum) {
-    seq: struct { *Expr, *Expr },
-    basic_lit: struct { BasicLitKind, []const u8 },
-    bin_op: struct { BinOpKind, *Expr, *Expr },
-    uni_op: struct { UniOpKind, *Expr },
-    if_expr: struct { IfExpr, []const IfExpr, ?*Expr },
+    seq: struct { a: *Expr, b: *Expr },
+    basic_lit: struct { kind: BasicLitKind, text: []const u8 },
+    bin_op: struct {
+        op: BinOpKind,
+        lhs: *Expr,
+        rhs: *Expr,
+    },
+    uni_op: struct {
+        op: UniOpKind,
+        operand: *Expr,
+    },
+    if_expr: struct {
+        head: IfExpr,
+        elseifs: []const IfExpr,
+        else_body: ?*Expr,
+    },
 };
 
 // Pratt parsing algo
@@ -91,12 +102,12 @@ fn expr_bp(alloc: std.mem.Allocator, lex: *lexer.Lexer, min_bp: u8) errors.Parse
         .prefix => {
             const token = lex.next();
             lhs = try switch (token.type) {
-                .number => Expr{ .basic_lit = .{ try BasicLitKind.FromToken(token), token.text } },
+                .number => Expr{ .basic_lit = .{ .kind = try BasicLitKind.FromToken(token), .text = token.text } },
                 .minus => blk: {
                     const bp = try prefix_bp(token.type);
                     const rhs = try alloc.create(Expr);
                     rhs.* = try expr_bp(alloc, lex, bp.r);
-                    break :blk Expr{ .uni_op = .{ try UniOpKind.FromToken(token.type), rhs } };
+                    break :blk Expr{ .uni_op = .{ .op = try UniOpKind.FromToken(token.type), .operand = rhs } };
                 },
                 .left_paren => blk: {
                     const rhs = try expr_bp(alloc, lex, 0);
@@ -128,7 +139,7 @@ fn expr_bp(alloc: std.mem.Allocator, lex: *lexer.Lexer, min_bp: u8) errors.Parse
             rhs_node.* = try expr_bp(alloc, lex, bp.r);
             const lhs_node = try alloc.create(Expr);
             lhs_node.* = lhs;
-            lhs = .{ .bin_op = .{ op, lhs_node, rhs_node } };
+            lhs = .{ .bin_op = .{ .op = op, .lhs = lhs_node, .rhs = rhs_node } };
             continue :state .loop;
         },
         .post_uni_op => {
@@ -140,7 +151,7 @@ fn expr_bp(alloc: std.mem.Allocator, lex: *lexer.Lexer, min_bp: u8) errors.Parse
             _ = lex.next();
             const lhs_node = try alloc.create(Expr);
             lhs_node.* = lhs;
-            lhs = .{ .uni_op = .{ op, lhs_node } };
+            lhs = .{ .uni_op = .{ .op = op, .operand = lhs_node } };
             continue :state .loop;
         },
     }
@@ -193,11 +204,11 @@ fn parse_if(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Expr 
     }
 
     const if_expr = try alloc.create(Expr);
-    if_expr.* = Expr{ .if_expr = .{ first_if, try elseifs.toOwnedSlice(alloc), body } };
+    if_expr.* = Expr{ .if_expr = .{ .head = first_if, .elseifs = try elseifs.toOwnedSlice(alloc), .else_body = body } };
     const rest = try alloc.create(Expr);
     rest.* = try expr_bp(alloc, lex, 0);
 
-    return Expr{ .seq = .{ if_expr, rest } };
+    return Expr{ .seq = .{ .a = if_expr, .b = rest } };
 }
 
 fn parse_if_cond_body(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!IfExpr {
@@ -233,8 +244,8 @@ test "parse: single integer" {
     defer arena.deinit();
     const result = try parse(arena.allocator(), "42");
     try testing.expect(result == .basic_lit);
-    try testing.expectEqual(BasicLitKind.int, result.basic_lit[0]);
-    try testing.expectEqualStrings("42", result.basic_lit[1]);
+    try testing.expectEqual(BasicLitKind.int, result.basic_lit.kind);
+    try testing.expectEqualStrings("42", result.basic_lit.text);
 }
 
 test "parse: single float" {
@@ -242,8 +253,8 @@ test "parse: single float" {
     defer arena.deinit();
     const result = try parse(arena.allocator(), "3.14");
     try testing.expect(result == .basic_lit);
-    try testing.expectEqual(BasicLitKind.float, result.basic_lit[0]);
-    try testing.expectEqualStrings("3.14", result.basic_lit[1]);
+    try testing.expectEqual(BasicLitKind.float, result.basic_lit.kind);
+    try testing.expectEqualStrings("3.14", result.basic_lit.text);
 }
 
 test "parse: addition" {
@@ -251,9 +262,9 @@ test "parse: addition" {
     defer arena.deinit();
     const result = try parse(arena.allocator(), "1 + 2");
     try testing.expect(result == .bin_op);
-    try testing.expectEqual(BinOpKind.plus, result.bin_op[0]);
-    try testing.expectEqualStrings("1", result.bin_op[1].basic_lit[1]);
-    try testing.expectEqualStrings("2", result.bin_op[2].basic_lit[1]);
+    try testing.expectEqual(BinOpKind.plus, result.bin_op.op);
+    try testing.expectEqualStrings("1", result.bin_op.lhs.basic_lit.text);
+    try testing.expectEqualStrings("2", result.bin_op.rhs.basic_lit.text);
 }
 
 test "parse: subtraction" {
@@ -261,7 +272,7 @@ test "parse: subtraction" {
     defer arena.deinit();
     const result = try parse(arena.allocator(), "5 - 3");
     try testing.expect(result == .bin_op);
-    try testing.expectEqual(BinOpKind.minus, result.bin_op[0]);
+    try testing.expectEqual(BinOpKind.minus, result.bin_op.op);
 }
 
 test "parse: multiplication" {
@@ -269,7 +280,7 @@ test "parse: multiplication" {
     defer arena.deinit();
     const result = try parse(arena.allocator(), "2 * 4");
     try testing.expect(result == .bin_op);
-    try testing.expectEqual(BinOpKind.mult, result.bin_op[0]);
+    try testing.expectEqual(BinOpKind.mult, result.bin_op.op);
 }
 
 test "parse: mult binds tighter than plus" {
@@ -277,9 +288,9 @@ test "parse: mult binds tighter than plus" {
     defer arena.deinit();
     const result = try parse(arena.allocator(), "1 + 2 * 3");
     try testing.expect(result == .bin_op);
-    try testing.expectEqual(BinOpKind.plus, result.bin_op[0]);
-    try testing.expect(result.bin_op[2].* == .bin_op);
-    try testing.expectEqual(BinOpKind.mult, result.bin_op[2].bin_op[0]);
+    try testing.expectEqual(BinOpKind.plus, result.bin_op.op);
+    try testing.expect(result.bin_op.rhs.* == .bin_op);
+    try testing.expectEqual(BinOpKind.mult, result.bin_op.rhs.bin_op.op);
 }
 
 test "parse: plus is left-associative" {
@@ -287,9 +298,9 @@ test "parse: plus is left-associative" {
     defer arena.deinit();
     const result = try parse(arena.allocator(), "1 + 2 + 3");
     try testing.expect(result == .bin_op);
-    try testing.expectEqual(BinOpKind.plus, result.bin_op[0]);
-    try testing.expect(result.bin_op[1].* == .bin_op);
-    try testing.expectEqual(BinOpKind.plus, result.bin_op[1].bin_op[0]);
+    try testing.expectEqual(BinOpKind.plus, result.bin_op.op);
+    try testing.expect(result.bin_op.lhs.* == .bin_op);
+    try testing.expectEqual(BinOpKind.plus, result.bin_op.lhs.bin_op.op);
 }
 
 test "parse: parenthesized expression" {
@@ -297,8 +308,8 @@ test "parse: parenthesized expression" {
     defer arena.deinit();
     const result = try parse(arena.allocator(), "(42)");
     try testing.expect(result == .basic_lit);
-    try testing.expectEqual(BasicLitKind.int, result.basic_lit[0]);
-    try testing.expectEqualStrings("42", result.basic_lit[1]);
+    try testing.expectEqual(BasicLitKind.int, result.basic_lit.kind);
+    try testing.expectEqualStrings("42", result.basic_lit.text);
 }
 
 test "parse: parens override precedence" {
@@ -307,12 +318,12 @@ test "parse: parens override precedence" {
     // (1 + 2) * 3 should parse as (* (+ 1 2) 3), not (+ 1 (* 2 3))
     const result = try parse(arena.allocator(), "(1 + 2) * 3");
     try testing.expect(result == .bin_op);
-    try testing.expectEqual(BinOpKind.mult, result.bin_op[0]);
-    try testing.expect(result.bin_op[1].* == .bin_op);
-    try testing.expectEqual(BinOpKind.plus, result.bin_op[1].bin_op[0]);
-    try testing.expectEqualStrings("1", result.bin_op[1].bin_op[1].basic_lit[1]);
-    try testing.expectEqualStrings("2", result.bin_op[1].bin_op[2].basic_lit[1]);
-    try testing.expectEqualStrings("3", result.bin_op[2].basic_lit[1]);
+    try testing.expectEqual(BinOpKind.mult, result.bin_op.op);
+    try testing.expect(result.bin_op.lhs.* == .bin_op);
+    try testing.expectEqual(BinOpKind.plus, result.bin_op.lhs.bin_op.op);
+    try testing.expectEqualStrings("1", result.bin_op.lhs.bin_op.lhs.basic_lit.text);
+    try testing.expectEqualStrings("2", result.bin_op.lhs.bin_op.rhs.basic_lit.text);
+    try testing.expectEqualStrings("3", result.bin_op.rhs.basic_lit.text);
 }
 
 test "parse: simple if" {
@@ -320,13 +331,13 @@ test "parse: simple if" {
     defer arena.deinit();
     const result = try parse(arena.allocator(), "if(1){2}3");
     try testing.expect(result == .seq);
-    try testing.expect(result.seq[0].* == .if_expr);
-    const if_expr = result.seq[0].if_expr;
-    try testing.expectEqualStrings("1", if_expr[0].cond.basic_lit[1]);
-    try testing.expectEqualStrings("2", if_expr[0].body.basic_lit[1]);
-    try testing.expectEqual(@as(usize, 0), if_expr[1].len);
-    try testing.expectEqual(@as(?*Expr, null), if_expr[2]);
-    try testing.expectEqualStrings("3", result.seq[1].basic_lit[1]);
+    try testing.expect(result.seq.a.* == .if_expr);
+    const if_expr = result.seq.a.if_expr;
+    try testing.expectEqualStrings("1", if_expr.head.cond.basic_lit.text);
+    try testing.expectEqualStrings("2", if_expr.head.body.basic_lit.text);
+    try testing.expectEqual(@as(usize, 0), if_expr.elseifs.len);
+    try testing.expectEqual(@as(?*Expr, null), if_expr.else_body);
+    try testing.expectEqualStrings("3", result.seq.b.basic_lit.text);
 }
 
 test "parse: if elif else" {
@@ -334,15 +345,15 @@ test "parse: if elif else" {
     defer arena.deinit();
     const result = try parse(arena.allocator(), "if(1){2}elif(3){4}else{5}6");
     try testing.expect(result == .seq);
-    const if_expr = result.seq[0].if_expr;
-    try testing.expectEqualStrings("1", if_expr[0].cond.basic_lit[1]);
-    try testing.expectEqualStrings("2", if_expr[0].body.basic_lit[1]);
-    try testing.expectEqual(@as(usize, 1), if_expr[1].len);
-    try testing.expectEqualStrings("3", if_expr[1][0].cond.basic_lit[1]);
-    try testing.expectEqualStrings("4", if_expr[1][0].body.basic_lit[1]);
-    try testing.expect(if_expr[2] != null);
-    try testing.expectEqualStrings("5", if_expr[2].?.basic_lit[1]);
-    try testing.expectEqualStrings("6", result.seq[1].basic_lit[1]);
+    const if_expr = result.seq.a.if_expr;
+    try testing.expectEqualStrings("1", if_expr.head.cond.basic_lit.text);
+    try testing.expectEqualStrings("2", if_expr.head.body.basic_lit.text);
+    try testing.expectEqual(@as(usize, 1), if_expr.elseifs.len);
+    try testing.expectEqualStrings("3", if_expr.elseifs[0].cond.basic_lit.text);
+    try testing.expectEqualStrings("4", if_expr.elseifs[0].body.basic_lit.text);
+    try testing.expect(if_expr.else_body != null);
+    try testing.expectEqualStrings("5", if_expr.else_body.?.basic_lit.text);
+    try testing.expectEqualStrings("6", result.seq.b.basic_lit.text);
 }
 
 test "parse: postfix ! binds tighter than +" {
@@ -351,9 +362,9 @@ test "parse: postfix ! binds tighter than +" {
     // 2 + 3! should parse as 2 + (3!), not (2 + 3)!
     const result = try parse(arena.allocator(), "2 + 3!");
     try testing.expect(result == .bin_op);
-    try testing.expectEqual(BinOpKind.plus, result.bin_op[0]);
-    try testing.expectEqualStrings("2", result.bin_op[1].basic_lit[1]);
-    try testing.expect(result.bin_op[2].* == .uni_op);
-    try testing.expectEqual(UniOpKind.not, result.bin_op[2].uni_op[0]);
-    try testing.expectEqualStrings("3", result.bin_op[2].uni_op[1].basic_lit[1]);
+    try testing.expectEqual(BinOpKind.plus, result.bin_op.op);
+    try testing.expectEqualStrings("2", result.bin_op.lhs.basic_lit.text);
+    try testing.expect(result.bin_op.rhs.* == .uni_op);
+    try testing.expectEqual(UniOpKind.not, result.bin_op.rhs.uni_op.op);
+    try testing.expectEqualStrings("3", result.bin_op.rhs.uni_op.operand.basic_lit.text);
 }
