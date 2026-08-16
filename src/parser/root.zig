@@ -60,6 +60,7 @@ const BasicLitKind = enum {
 };
 
 const Clause = struct { cond: *Expr, body: *Expr };
+const Field = struct { name: []const u8, type: *Expr };
 
 const Expr = union(enum) {
     seq: struct { a: *Expr, b: *Expr },
@@ -77,6 +78,10 @@ const Expr = union(enum) {
         head: Clause,
         elseifs: []const Clause,
         else_body: ?*Expr,
+    },
+    struct_expr: struct {
+        name: []const u8,
+        fields: []const Field,
     },
 };
 
@@ -116,6 +121,7 @@ fn expr_bp(alloc: std.mem.Allocator, lex: *lexer.Lexer, min_bp: u8) errors.Parse
                     break :blk rhs;
                 },
                 .keyword_if => try parse_if(alloc, lex),
+                .keyword_struct => try parse_struct(alloc, lex),
                 else => error.UnexpectedToken,
             };
             continue :state .loop;
@@ -184,7 +190,11 @@ fn infix_bp(op: lexer.TokenType) errors.ParseError!Bp {
 }
 
 // Parse expressions
+fn parse_struct(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Expr {
+    const t = lex.next();
+    if (t.type != .identifier) return errors.ExpectedIdentifier;
 
+}
 fn parse_if(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Expr {
     const first_if = try parse_if_cond_body(alloc, lex);
 

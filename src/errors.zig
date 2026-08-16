@@ -9,4 +9,5 @@ pub const ParseError = error{
     ExpectedRBrace,
     ExpectedLBrace,
     ExpectedLParen,
+    ExpectedIdentifier,
 };
