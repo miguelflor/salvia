@@ -2,6 +2,8 @@ const lexer = @import("lexer");
 const std = @import("std");
 const errors = @import("errors");
 
+// Expressions structs
+
 const BinOpKind = enum {
     equal,
     greater,
@@ -57,11 +59,24 @@ const BasicLitKind = enum {
     }
 };
 
-const Expr = union(enum) { basic_lit: struct { BasicLitKind, []const u8 }, bin_op: struct { BinOpKind, *Expr, *Expr }, uni_op: struct { UniOpKind, *Expr } };
+const IfExpr = struct { cond: *Expr, body: *Expr };
 
-const Bp = struct { l: u8, r: u8 };
+const Expr = union(enum) {
+    seq: struct { *Expr, *Expr },
+    basic_lit: struct { BasicLitKind, []const u8 },
+    bin_op: struct { BinOpKind, *Expr, *Expr },
+    uni_op: struct { UniOpKind, *Expr },
+    if_expr: struct { IfExpr, []const IfExpr, ?*Expr },
+};
 
-const State = enum { prefix, loop, bin_op, post_uni_op };
+// Pratt parsing algo
+
+const State = enum {
+    prefix,
+    loop,
+    bin_op,
+    post_uni_op,
+};
 
 // returns an expression tree, free whatever alloc uses, for example with arena
 pub fn parse(alloc: std.mem.Allocator, code: [:0]const u8) errors.ParseError!Expr {
@@ -88,15 +103,15 @@ fn expr_bp(alloc: std.mem.Allocator, lex: *lexer.Lexer, min_bp: u8) errors.Parse
                     const t = lex.next();
                     if (t.type != .right_paren) return error.ExpectedRParen;
                     break :blk rhs;
-
                 },
+                .keyword_if => try parse_if(alloc, lex),
                 else => error.UnexpectedToken,
             };
             continue :state .loop;
         },
         .loop => {
             switch (lex.peek().type) {
-                .eof, .right_paren => return lhs,
+                .eof, .right_paren, .right_brace => return lhs,
                 .minus, .plus, .mult => continue :state .bin_op,
                 .not => continue :state .post_uni_op,
                 else => return error.NotImplemented,
@@ -131,6 +146,10 @@ fn expr_bp(alloc: std.mem.Allocator, lex: *lexer.Lexer, min_bp: u8) errors.Parse
     }
 }
 
+// Binding power
+
+const Bp = struct { l: u8, r: u8 };
+
 fn postfix_bp(op: lexer.TokenType) errors.ParseError!Bp {
     return switch (op) {
         .not => Bp{ .l = 6, .r = undefined },
@@ -152,6 +171,60 @@ fn infix_bp(op: lexer.TokenType) errors.ParseError!Bp {
         else => error.UnexpectedToken,
     };
 }
+
+// Parse expressions
+
+fn parse_if(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Expr {
+    const first_if = try parse_if_cond_body(alloc, lex);
+
+    var elseifs: std.ArrayList(IfExpr) = .empty;
+    defer elseifs.deinit(alloc);
+
+    while (.keyword_elif == lex.peek().type) {
+        _ = lex.next();
+        const elseif = try parse_if_cond_body(alloc, lex);
+        try elseifs.append(alloc, elseif);
+    }
+
+    var body: ?*Expr = null;
+    if (.keyword_else == lex.peek().type) {
+        _ = lex.next();
+        body = try parse_body(alloc, lex);
+    }
+
+    const if_expr = try alloc.create(Expr);
+    if_expr.* = Expr{ .if_expr = .{ first_if, try elseifs.toOwnedSlice(alloc), body } };
+    const rest = try alloc.create(Expr);
+    rest.* = try expr_bp(alloc, lex, 0);
+
+    return Expr{ .seq = .{ if_expr, rest } };
+}
+
+fn parse_if_cond_body(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!IfExpr {
+    var t = lex.next();
+    if (t.type != .left_paren) return error.ExpectedRParen;
+    const cond = try alloc.create(Expr);
+    cond.* = try expr_bp(alloc, lex, 0);
+    t = lex.next();
+    if (t.type != .right_paren) return error.ExpectedLParen;
+
+    const body = try parse_body(alloc, lex);
+
+    return IfExpr{ .cond = cond, .body = body };
+}
+
+fn parse_body(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!*Expr {
+    var t = lex.next();
+    if (t.type != .left_brace) return error.ExpectedLBrace;
+    const body = try alloc.create(Expr);
+    body.* = try expr_bp(alloc, lex, 0);
+    t = lex.next();
+    if (t.type != .right_brace) return error.ExpectedRBrace;
+
+    return body;
+}
+
+// Tests
 
 const testing = std.testing;
 
@@ -240,6 +313,36 @@ test "parse: parens override precedence" {
     try testing.expectEqualStrings("1", result.bin_op[1].bin_op[1].basic_lit[1]);
     try testing.expectEqualStrings("2", result.bin_op[1].bin_op[2].basic_lit[1]);
     try testing.expectEqualStrings("3", result.bin_op[2].basic_lit[1]);
+}
+
+test "parse: simple if" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const result = try parse(arena.allocator(), "if(1){2}3");
+    try testing.expect(result == .seq);
+    try testing.expect(result.seq[0].* == .if_expr);
+    const if_expr = result.seq[0].if_expr;
+    try testing.expectEqualStrings("1", if_expr[0].cond.basic_lit[1]);
+    try testing.expectEqualStrings("2", if_expr[0].body.basic_lit[1]);
+    try testing.expectEqual(@as(usize, 0), if_expr[1].len);
+    try testing.expectEqual(@as(?*Expr, null), if_expr[2]);
+    try testing.expectEqualStrings("3", result.seq[1].basic_lit[1]);
+}
+
+test "parse: if elif else" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const result = try parse(arena.allocator(), "if(1){2}elif(3){4}else{5}6");
+    try testing.expect(result == .seq);
+    const if_expr = result.seq[0].if_expr;
+    try testing.expectEqualStrings("1", if_expr[0].cond.basic_lit[1]);
+    try testing.expectEqualStrings("2", if_expr[0].body.basic_lit[1]);
+    try testing.expectEqual(@as(usize, 1), if_expr[1].len);
+    try testing.expectEqualStrings("3", if_expr[1][0].cond.basic_lit[1]);
+    try testing.expectEqualStrings("4", if_expr[1][0].body.basic_lit[1]);
+    try testing.expect(if_expr[2] != null);
+    try testing.expectEqualStrings("5", if_expr[2].?.basic_lit[1]);
+    try testing.expectEqualStrings("6", result.seq[1].basic_lit[1]);
 }
 
 test "parse: postfix ! binds tighter than +" {

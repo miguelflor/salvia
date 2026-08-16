@@ -1,7 +1,20 @@
 const std = @import("std");
 const testing = std.testing;
 
-const State = enum { start, identifier, less, greater, string, equal, int, int_dot, float, not_diff, backslash, slash };
+const State = enum {
+    start,
+    identifier,
+    less,
+    greater,
+    string,
+    equal,
+    int,
+    int_dot,
+    float,
+    not_diff,
+    backslash,
+    slash,
+};
 
 pub const TokenType = enum {
     invalid,
@@ -42,6 +55,7 @@ pub const TokenType = enum {
     // keywords.
     keyword_struct,
     keyword_else,
+    keyword_elif,
     keyword_false,
     keyword_fun,
     keyword_for,
@@ -59,6 +73,7 @@ pub const TokenType = enum {
 const keywordStr = std.StaticStringMap(TokenType).initComptime(.{
     .{ "struct", .keyword_struct },
     .{ "else", .keyword_else },
+    .{ "elif", .keyword_elif },
     .{ "false", .keyword_false },
     .{ "fun", .keyword_fun },
     .{ "for", .keyword_for },
