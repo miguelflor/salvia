@@ -18,7 +18,7 @@ Best-effort broadcast using Salvia's interfaces, triggers, and RPC messaging:
 
 ```svl
 struct Message {
-    msg string,
+    msg: string,
 }
 
 
