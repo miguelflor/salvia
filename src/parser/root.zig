@@ -64,6 +64,7 @@ const Field = struct { name: []const u8, type: *Expr };
 
 const Expr = union(enum) {
     seq: struct { a: *Expr, b: *Expr },
+    name: struct { text: []const u8 },
     basic_lit: struct { kind: BasicLitKind, text: []const u8 },
     bin_op: struct {
         op: BinOpKind,
@@ -107,6 +108,7 @@ fn expr_bp(alloc: std.mem.Allocator, lex: *lexer.Lexer, min_bp: u8) errors.Parse
         .prefix => {
             const token = lex.next();
             lhs = try switch (token.type) {
+                .identifier => Expr{ .name = .{ .text = token.text } },
                 .number => Expr{ .basic_lit = .{ .kind = try BasicLitKind.FromToken(token), .text = token.text } },
                 .minus => blk: {
                     const bp = try prefix_bp(token.type);
@@ -190,11 +192,41 @@ fn infix_bp(op: lexer.TokenType) errors.ParseError!Bp {
 }
 
 // Parse expressions
-fn parse_struct(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Expr {
-    const t = lex.next();
-    if (t.type != .identifier) return errors.ExpectedIdentifier;
 
+fn parse_struct(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Expr {
+    const name = lex.next();
+    if (name.type != .identifier) return errors.ExpectedIdentifier;
+
+    if (lex.next().type != .left_brace) return errors.ExpectedLBrace;
+    var fields: std.ArrayList(Field) = .empty;
+    defer fields.deinit(alloc);
+
+    while (lex.peek().type != .right_brace) {
+        const field_name = lex.next();
+        if (field_name.type != .identifier) return errors.ExpectedIndentifier;
+
+        if (lex.next().type != .colon) return errors.ExpectedColon;
+        const tp = try parse_type(alloc, lex);
+
+        if (lex.next().type != .comma) {
+            // the last field can ommit comma
+            if (lex.peek().type == .right_brace) continue;
+            return errors.ExpectedComma;
+        }
+
+        fields.append(alloc, Field{ .name = field_name.text, .type = tp });
+    }
+
+    return Expr{
+        .struct_expr = .{
+            .name = name.text,
+            .fields = try fields.toOwnedSlice(alloc),
+        },
+    };
 }
+
+fn parse_type(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Expr {}
+
 fn parse_if(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Expr {
     const first_if = try parse_if_cond_body(alloc, lex);
 

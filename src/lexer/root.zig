@@ -29,6 +29,7 @@ pub const TokenType = enum {
     comma,
     dot,
     semicolon,
+    colon,
 
     // Ops
     minus,
@@ -211,6 +212,11 @@ pub const Lexer = struct {
                     },
                     '.' => {
                         token.type = .dot;
+                        self.pos += 1;
+                        text_end = self.pos;
+                    },
+                    ':' => {
+                        token.type = .colon;
                         self.pos += 1;
                         text_end = self.pos;
                     },

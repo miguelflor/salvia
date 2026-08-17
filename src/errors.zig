@@ -10,4 +10,6 @@ pub const ParseError = error{
     ExpectedLBrace,
     ExpectedLParen,
     ExpectedIdentifier,
+    ExpectedColon,
+    ExpectedComma,
 };
