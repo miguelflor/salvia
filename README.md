@@ -18,14 +18,15 @@ Best-effort broadcast using Salvia's interfaces, triggers, and RPC messaging:
 
 ```svl
 struct Message {
-    msg string,
+    msg: string,
 }
 
 
 pub interface Broadcast {
-    fn init() -> Broadcast,
-    fn send(self, Message) -> (),
-    fn getDeliver(self) -> trigger[Message],
+    proc: init() -> Broadcast,
+    proc: send(self, Message) -> (),
+    proc: getDeliver(self) -> trigger[Message],
+    upon: <~(Message),
 }
 
 struct BebBroadcast {
