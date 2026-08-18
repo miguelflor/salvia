@@ -212,11 +212,14 @@ fn parse_struct(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!E
         const tp = try alloc.create(Expr);
         tp.* = try parse_type(alloc, lex);
 
-        if (lex.next().type != .comma) {
-            // the last field can ommit comma
-            if (lex.peek().type == .right_brace) continue;
+        const tk = lex.peek();
+
+        // the last field can ommit comma
+        if (tk.type != .comma and tk.type != .right_brace) {
             return error.ExpectedComma;
         }
+
+        if (tk.type == .comma) _ = lex.next();
 
         try fields.append(alloc, Field{ .name = field_name.text, .type = tp });
     }
