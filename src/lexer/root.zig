@@ -309,7 +309,7 @@ pub const Lexer = struct {
             },
             .identifier => {
                 switch (self.code[self.pos]) {
-                    'a'...'z', 'A'...'Z' => {
+                    'a'...'z', 'A'...'Z', '0'...'9' => {
                         self.pos += 1;
                         continue :state .identifier;
                     },
