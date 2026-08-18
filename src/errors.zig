@@ -7,6 +7,8 @@ pub const ParseError = error{
     NotUnaryOp,
     ExpectedRParen,
     ExpectedRBrace,
+    ExpectedRSquare,
+    ExpectedLSquare,
     ExpectedLBrace,
     ExpectedLParen,
     ExpectedIdentifier,

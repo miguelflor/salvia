@@ -84,6 +84,9 @@ const Expr = union(enum) {
         name: []const u8,
         fields: []const Field,
     },
+    // types
+    array_type: struct { type: *Expr },
+    set_type: struct { type: *Expr },
 };
 
 // Pratt parsing algo
@@ -217,6 +220,8 @@ fn parse_struct(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!E
         fields.append(alloc, Field{ .name = field_name.text, .type = tp });
     }
 
+    _ = lex.next();
+
     return Expr{
         .struct_expr = .{
             .name = name.text,
@@ -225,7 +230,29 @@ fn parse_struct(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!E
     };
 }
 
-fn parse_type(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Expr {}
+fn parse_type(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Expr {
+    const token = lex.next();
+    return switch (token.type) {
+        .identifier => Expr{ .name = .{ .text = token.text } },
+        .left_square => blk: {
+            if (.right_square != lex.next().type) return errors.ExpectedRSquare;
+            const tp = alloc.create(Expr);
+            tp.* = try parse_type(alloc, lex);
+
+            break :blk Expr{ .array_type = .{.type = tp}};
+        },
+        .keyword_set => blk: {
+            if (.left_square != lex.next().type) return errors.ExpectedLSquare;
+            const tp = alloc.create(Expr);
+            tp.* = try parse_type(alloc, lex);
+
+            if (.right_square != lex.next().type) return errors.ExpectedRSquare;
+
+            break :blk Expr{ .set_type = .{.type = tp}};
+        },
+        else => error.UnexpectedToken,
+    };
+}
 
 fn parse_if(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Expr {
     const first_if = try parse_if_cond_body(alloc, lex);
