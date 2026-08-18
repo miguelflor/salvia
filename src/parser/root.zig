@@ -198,26 +198,27 @@ fn infix_bp(op: lexer.TokenType) errors.ParseError!Bp {
 
 fn parse_struct(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Expr {
     const name = lex.next();
-    if (name.type != .identifier) return errors.ExpectedIdentifier;
+    if (name.type != .identifier) return error.ExpectedIdentifier;
 
-    if (lex.next().type != .left_brace) return errors.ExpectedLBrace;
+    if (lex.next().type != .left_brace) return error.ExpectedLBrace;
     var fields: std.ArrayList(Field) = .empty;
     defer fields.deinit(alloc);
 
     while (lex.peek().type != .right_brace) {
         const field_name = lex.next();
-        if (field_name.type != .identifier) return errors.ExpectedIndentifier;
+        if (field_name.type != .identifier) return error.ExpectedIdentifier;
 
-        if (lex.next().type != .colon) return errors.ExpectedColon;
-        const tp = try parse_type(alloc, lex);
+        if (lex.next().type != .colon) return error.ExpectedColon;
+        const tp = try alloc.create(Expr);
+        tp.* = try parse_type(alloc, lex);
 
         if (lex.next().type != .comma) {
             // the last field can ommit comma
             if (lex.peek().type == .right_brace) continue;
-            return errors.ExpectedComma;
+            return error.ExpectedComma;
         }
 
-        fields.append(alloc, Field{ .name = field_name.text, .type = tp });
+        try fields.append(alloc, Field{ .name = field_name.text, .type = tp });
     }
 
     _ = lex.next();
@@ -235,18 +236,18 @@ fn parse_type(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Exp
     return switch (token.type) {
         .identifier => Expr{ .name = .{ .text = token.text } },
         .left_square => blk: {
-            if (.right_square != lex.next().type) return errors.ExpectedRSquare;
-            const tp = alloc.create(Expr);
+            if (.right_square != lex.next().type) return error.ExpectedRSquare;
+            const tp = try alloc.create(Expr);
             tp.* = try parse_type(alloc, lex);
 
             break :blk Expr{ .array_type = .{.type = tp}};
         },
         .keyword_set => blk: {
-            if (.left_square != lex.next().type) return errors.ExpectedLSquare;
-            const tp = alloc.create(Expr);
+            if (.left_square != lex.next().type) return error.ExpectedLSquare;
+            const tp = try alloc.create(Expr);
             tp.* = try parse_type(alloc, lex);
 
-            if (.right_square != lex.next().type) return errors.ExpectedRSquare;
+            if (.right_square != lex.next().type) return error.ExpectedRSquare;
 
             break :blk Expr{ .set_type = .{.type = tp}};
         },
