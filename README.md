@@ -23,10 +23,10 @@ struct Message {
 
 
 pub interface Broadcast {
-    proc: init() -> Broadcast,
-    proc: send(self, Message) -> (),
-    proc: getDeliver(self) -> trigger[Message],
-    upon: <~(Message),
+    init: proc() Broadcast,
+    send: proc(self, Message) (),
+    getDeliver: proc(self) trigger[Message],
+    upon(<~Message),
 }
 
 struct BebBroadcast {
