@@ -40,17 +40,17 @@ extend Broadcast with BebBroadcast{
         return BebBroadcast{ids: Self.ids, delieverBeb: init(trigger[Message])};
     }
 
-    proc getDeliver(self) {
+    proc getDeliver() {
         self.delieverBeb
     }
 
-    proc send(self, msg Message) {
+    proc send(msg Message) {
         msg = Message{ msg: "something" }; // ; behaves like rust
         {id <~ msg : id in self.ids} // <~ is to make a message through RPC
     }
 
     upon <~(msg Message) {
-        delieverBeb <- msg; // <- to activate the trigger
+        self.delieverBeb <- msg; // <- to activate the trigger
     }
 }
 ```
