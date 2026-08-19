@@ -84,6 +84,11 @@ const Expr = union(enum) {
         name: []const u8,
         fields: []const Field,
     },
+    extend: struct {
+        struct_name: []const u8,
+        interface_name: []const u8,
+        methods: []const *Expr,
+    },
     // types
     array_type: struct { type: *Expr },
     set_type: struct { type: *Expr },
@@ -127,6 +132,7 @@ fn expr_bp(alloc: std.mem.Allocator, lex: *lexer.Lexer, min_bp: u8) errors.Parse
                 },
                 .keyword_if => try parse_if(alloc, lex),
                 .keyword_struct => try parse_struct(alloc, lex),
+                .keyword_extend => try parse_extend(alloc, lex),
                 else => error.UnexpectedToken,
             };
             continue :state .loop;
@@ -196,6 +202,43 @@ fn infix_bp(op: lexer.TokenType) errors.ParseError!Bp {
 
 // Parse expressions
 
+fn parse_extend(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Expr {
+    const struct_name = lex.next();
+    if (struct_name.type != .identifier) return error.ExpectedIdentifier;
+
+    if (lex.next().type != .keyword_with) return error.ExpectedWith;
+
+    const interface_name = lex.next();
+    if (interface_name.type != .identifier) return error.ExpectedIdentifier;
+
+    if (lex.next().type != .left_brace) return error.ExpectedLBrace;
+
+    const methods: std.ArrayList(*Expr) = .empty;
+
+    while (lex.peek().type != .right_brace) {
+        const tk = lex.next();
+        const method = try alloc.create(Expr);
+
+        method.* = switch (tk.type) {
+            .keyword_proc => try parse_proc(alloc, lex),
+            .keyword_upon => try parse_upon(alloc, lex),
+            else => return error.ExpectedProcOrUpon,
+        };
+
+        try methods.append(alloc, lex);
+    }
+
+    _ = lex.next();
+
+    return Expr{
+        .extend = .{
+            .interface_name = interface_name.text,
+            .struct_name = struct_name.text,
+            .methods = try methods.toOwnedSlice(alloc),
+        },
+    };
+}
+
 fn parse_struct(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Expr {
     const name = lex.next();
     if (name.type != .identifier) return error.ExpectedIdentifier;
@@ -243,7 +286,7 @@ fn parse_type(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Exp
             const tp = try alloc.create(Expr);
             tp.* = try parse_type(alloc, lex);
 
-            break :blk Expr{ .array_type = .{.type = tp}};
+            break :blk Expr{ .array_type = .{ .type = tp } };
         },
         .keyword_set => blk: {
             if (.left_square != lex.next().type) return error.ExpectedLSquare;
@@ -252,7 +295,7 @@ fn parse_type(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Exp
 
             if (.right_square != lex.next().type) return error.ExpectedRSquare;
 
-            break :blk Expr{ .set_type = .{.type = tp}};
+            break :blk Expr{ .set_type = .{ .type = tp } };
         },
         else => error.UnexpectedToken,
     };

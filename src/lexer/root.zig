@@ -56,10 +56,13 @@ pub const TokenType = enum {
     // keywords.
     keyword_struct,
     keyword_set,
+    keyword_with,
+    keyword_extend,
     keyword_else,
     keyword_elif,
     keyword_false,
-    keyword_fun,
+    keyword_proc,
+    keyword_upon,
     keyword_for,
     keyword_if,
     keyword_nil,
@@ -75,10 +78,13 @@ pub const TokenType = enum {
 const keywordStr = std.StaticStringMap(TokenType).initComptime(.{
     .{ "struct", .keyword_struct },
     .{ "set", .keyword_set },
+    .{ "with", .keyword_with },
+    .{ "extend", .keyword_extend },
     .{ "else", .keyword_else },
     .{ "elif", .keyword_elif },
     .{ "false", .keyword_false },
-    .{ "fun", .keyword_fun },
+    .{ "proc", .keyword_proc },
+    .{ "upon", .keyword_upon },
     .{ "for", .keyword_for },
     .{ "if", .keyword_if },
     .{ "nil", .keyword_nil },
@@ -511,7 +517,7 @@ test "keywords" {
     defer list.deinit(testing.allocator);
     try testing.expectEqualSlices(TokenType, &[_]TokenType{
         .keyword_if,  .keyword_else,   .keyword_while,
-        .keyword_for, .keyword_return, .keyword_fun,
+        .keyword_for, .keyword_return, .keyword_proc,
         .eof,
     }, list.items(.type));
     try testing.expectEqualDeep(&[_][]const u8{

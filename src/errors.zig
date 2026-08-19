@@ -14,4 +14,5 @@ pub const ParseError = error{
     ExpectedIdentifier,
     ExpectedColon,
     ExpectedComma,
+    ExpectedWith,
 };
