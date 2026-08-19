@@ -14,7 +14,7 @@ const BinOpKind = enum {
     plus,
     mult,
 
-    fn FromToken(token: lexer.TokenType) errors.ParseError!BinOpKind {
+    fn fromToken(token: lexer.TokenType) errors.ParseError!BinOpKind {
         return switch (token) {
             .equal => .equal,
             .greater => .greater,
@@ -33,7 +33,7 @@ const UniOpKind = enum {
     minus,
     not,
 
-    fn FromToken(token: lexer.TokenType) errors.ParseError!UniOpKind {
+    fn fromToken(token: lexer.TokenType) errors.ParseError!UniOpKind {
         return switch (token) {
             .minus => .minus,
             .not => .not,
@@ -47,7 +47,7 @@ const BasicLitKind = enum {
     string,
     int,
 
-    fn FromToken(token: lexer.Token) errors.ParseError!BasicLitKind {
+    fn fromToken(token: lexer.Token) errors.ParseError!BasicLitKind {
         return switch (token.type) {
             .number => {
                 _ = std.mem.indexOfScalar(u8, token.text, '.') orelse return .int;
@@ -106,10 +106,10 @@ const State = enum {
 // returns an expression tree, free whatever alloc uses, for example with arena
 pub fn parse(alloc: std.mem.Allocator, code: [:0]const u8) errors.ParseError!Expr {
     var lex = lexer.Lexer.init(code);
-    return try expr_bp(alloc, &lex, 0);
+    return try exprBp(alloc, &lex, 0);
 }
 
-fn expr_bp(alloc: std.mem.Allocator, lex: *lexer.Lexer, min_bp: u8) errors.ParseError!Expr {
+fn exprBp(alloc: std.mem.Allocator, lex: *lexer.Lexer, min_bp: u8) errors.ParseError!Expr {
     var lhs: Expr = undefined;
 
     state: switch (State.prefix) {
@@ -117,22 +117,22 @@ fn expr_bp(alloc: std.mem.Allocator, lex: *lexer.Lexer, min_bp: u8) errors.Parse
             const token = lex.next();
             lhs = try switch (token.type) {
                 .identifier => Expr{ .name = .{ .text = token.text } },
-                .number => Expr{ .basic_lit = .{ .kind = try BasicLitKind.FromToken(token), .text = token.text } },
+                .number => Expr{ .basic_lit = .{ .kind = try BasicLitKind.fromToken(token), .text = token.text } },
                 .minus => blk: {
-                    const bp = try prefix_bp(token.type);
+                    const bp = try prefixBp(token.type);
                     const rhs = try alloc.create(Expr);
-                    rhs.* = try expr_bp(alloc, lex, bp.r);
-                    break :blk Expr{ .uni_op = .{ .op = try UniOpKind.FromToken(token.type), .operand = rhs } };
+                    rhs.* = try exprBp(alloc, lex, bp.r);
+                    break :blk Expr{ .uni_op = .{ .op = try UniOpKind.fromToken(token.type), .operand = rhs } };
                 },
                 .left_paren => blk: {
-                    const rhs = try expr_bp(alloc, lex, 0);
+                    const rhs = try exprBp(alloc, lex, 0);
                     const t = lex.next();
                     if (t.type != .right_paren) return error.ExpectedRParen;
                     break :blk rhs;
                 },
-                .keyword_if => try parse_if(alloc, lex),
-                .keyword_struct => try parse_struct(alloc, lex),
-                .keyword_extend => try parse_extend(alloc, lex),
+                .keyword_if => try parseIf(alloc, lex),
+                .keyword_struct => try parseStruct(alloc, lex),
+                .keyword_extend => try parseExtend(alloc, lex),
                 else => error.UnexpectedToken,
             };
             continue :state .loop;
@@ -147,13 +147,13 @@ fn expr_bp(alloc: std.mem.Allocator, lex: *lexer.Lexer, min_bp: u8) errors.Parse
         },
         .bin_op => {
             const peek = lex.peek();
-            const op = try BinOpKind.FromToken(peek.type);
-            const bp = try infix_bp(peek.type);
+            const op = try BinOpKind.fromToken(peek.type);
+            const bp = try infixBp(peek.type);
             if (bp.l < min_bp) return lhs;
 
             _ = lex.next();
             const rhs_node = try alloc.create(Expr);
-            rhs_node.* = try expr_bp(alloc, lex, bp.r);
+            rhs_node.* = try exprBp(alloc, lex, bp.r);
             const lhs_node = try alloc.create(Expr);
             lhs_node.* = lhs;
             lhs = .{ .bin_op = .{ .op = op, .lhs = lhs_node, .rhs = rhs_node } };
@@ -161,8 +161,8 @@ fn expr_bp(alloc: std.mem.Allocator, lex: *lexer.Lexer, min_bp: u8) errors.Parse
         },
         .post_uni_op => {
             const peek = lex.peek();
-            const op = try UniOpKind.FromToken(peek.type);
-            const bp = try postfix_bp(peek.type);
+            const op = try UniOpKind.fromToken(peek.type);
+            const bp = try postfixBp(peek.type);
             if (bp.l < min_bp) return lhs;
 
             _ = lex.next();
@@ -178,21 +178,21 @@ fn expr_bp(alloc: std.mem.Allocator, lex: *lexer.Lexer, min_bp: u8) errors.Parse
 
 const Bp = struct { l: u8, r: u8 };
 
-fn postfix_bp(op: lexer.TokenType) errors.ParseError!Bp {
+fn postfixBp(op: lexer.TokenType) errors.ParseError!Bp {
     return switch (op) {
         .not => Bp{ .l = 6, .r = undefined },
         else => error.UnexpectedToken,
     };
 }
 
-fn prefix_bp(op: lexer.TokenType) errors.ParseError!Bp {
+fn prefixBp(op: lexer.TokenType) errors.ParseError!Bp {
     return switch (op) {
         .minus => Bp{ .l = undefined, .r = 5 },
         else => error.UnexpectedToken,
     };
 }
 
-fn infix_bp(op: lexer.TokenType) errors.ParseError!Bp {
+fn infixBp(op: lexer.TokenType) errors.ParseError!Bp {
     return switch (op) {
         .minus, .plus => Bp{ .l = 1, .r = 2 },
         .mult => Bp{ .l = 3, .r = 4 },
@@ -202,7 +202,7 @@ fn infix_bp(op: lexer.TokenType) errors.ParseError!Bp {
 
 // Parse expressions
 
-fn parse_extend(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Expr {
+fn parseExtend(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Expr {
     const struct_name = lex.next();
     if (struct_name.type != .identifier) return error.ExpectedIdentifier;
 
@@ -220,8 +220,8 @@ fn parse_extend(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!E
         const method = try alloc.create(Expr);
 
         method.* = switch (tk.type) {
-            .keyword_proc => try parse_proc(alloc, lex),
-            .keyword_upon => try parse_upon(alloc, lex),
+            .keyword_proc => try parseProc(alloc, lex),
+            .keyword_upon => try parseUpon(alloc, lex),
             else => return error.ExpectedProcOrUpon,
         };
 
@@ -239,7 +239,7 @@ fn parse_extend(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!E
     };
 }
 
-fn parse_struct(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Expr {
+fn parseStruct(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Expr {
     const name = lex.next();
     if (name.type != .identifier) return error.ExpectedIdentifier;
 
@@ -253,7 +253,7 @@ fn parse_struct(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!E
 
         if (lex.next().type != .colon) return error.ExpectedColon;
         const tp = try alloc.create(Expr);
-        tp.* = try parse_type(alloc, lex);
+        tp.* = try parseType(alloc, lex);
 
         const tk = lex.peek();
 
@@ -277,21 +277,21 @@ fn parse_struct(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!E
     };
 }
 
-fn parse_type(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Expr {
+fn parseType(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Expr {
     const token = lex.next();
     return switch (token.type) {
         .identifier => Expr{ .name = .{ .text = token.text } },
         .left_square => blk: {
             if (.right_square != lex.next().type) return error.ExpectedRSquare;
             const tp = try alloc.create(Expr);
-            tp.* = try parse_type(alloc, lex);
+            tp.* = try parseType(alloc, lex);
 
             break :blk Expr{ .array_type = .{ .type = tp } };
         },
         .keyword_set => blk: {
             if (.left_square != lex.next().type) return error.ExpectedLSquare;
             const tp = try alloc.create(Expr);
-            tp.* = try parse_type(alloc, lex);
+            tp.* = try parseType(alloc, lex);
 
             if (.right_square != lex.next().type) return error.ExpectedRSquare;
 
@@ -301,22 +301,22 @@ fn parse_type(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Exp
     };
 }
 
-fn parse_if(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Expr {
-    const first_if = try parse_if_cond_body(alloc, lex);
+fn parseIf(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Expr {
+    const first_if = try parseIfCondBody(alloc, lex);
 
     var elseifs: std.ArrayList(Clause) = .empty;
     defer elseifs.deinit(alloc);
 
     while (.keyword_elif == lex.peek().type) {
         _ = lex.next();
-        const elseif = try parse_if_cond_body(alloc, lex);
+        const elseif = try parseIfCondBody(alloc, lex);
         try elseifs.append(alloc, elseif);
     }
 
     var body: ?*Expr = null;
     if (.keyword_else == lex.peek().type) {
         _ = lex.next();
-        body = try parse_body(alloc, lex);
+        body = try parseBody(alloc, lex);
     }
 
     const if_expr = try alloc.create(Expr);
@@ -328,29 +328,29 @@ fn parse_if(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Expr 
         },
     };
     const rest = try alloc.create(Expr);
-    rest.* = try expr_bp(alloc, lex, 0);
+    rest.* = try exprBp(alloc, lex, 0);
 
     return Expr{ .seq = .{ .a = if_expr, .b = rest } };
 }
 
-fn parse_if_cond_body(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Clause {
+fn parseIfCondBody(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Clause {
     var t = lex.next();
     if (t.type != .left_paren) return error.ExpectedRParen;
     const cond = try alloc.create(Expr);
-    cond.* = try expr_bp(alloc, lex, 0);
+    cond.* = try exprBp(alloc, lex, 0);
     t = lex.next();
     if (t.type != .right_paren) return error.ExpectedLParen;
 
-    const body = try parse_body(alloc, lex);
+    const body = try parseBody(alloc, lex);
 
     return Clause{ .cond = cond, .body = body };
 }
 
-fn parse_body(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!*Expr {
+fn parseBody(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!*Expr {
     var t = lex.next();
     if (t.type != .left_brace) return error.ExpectedLBrace;
     const body = try alloc.create(Expr);
-    body.* = try expr_bp(alloc, lex, 0);
+    body.* = try exprBp(alloc, lex, 0);
     t = lex.next();
     if (t.type != .right_brace) return error.ExpectedRBrace;
 
