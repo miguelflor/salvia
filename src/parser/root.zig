@@ -320,7 +320,13 @@ fn parse_if(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Expr 
     }
 
     const if_expr = try alloc.create(Expr);
-    if_expr.* = Expr{ .if_expr = .{ .head = first_if, .elseifs = try elseifs.toOwnedSlice(alloc), .else_body = body } };
+    if_expr.* = Expr{
+        .if_expr = .{
+            .head = first_if,
+            .elseifs = try elseifs.toOwnedSlice(alloc),
+            .else_body = body,
+        },
+    };
     const rest = try alloc.create(Expr);
     rest.* = try expr_bp(alloc, lex, 0);
 
