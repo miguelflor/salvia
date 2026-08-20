@@ -291,7 +291,6 @@ fn parseStruct(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Ex
 
     if (lex.next().type != .left_brace) return error.ExpectedLBrace;
 
-    // TODO: Is it 0, throw error
     const fields = try parseFields(alloc, lex, .{ .l = .left_brace, .r = .right_brace }, true);
     if (fields.len == 0) return error.ExtendEmpty;
 
