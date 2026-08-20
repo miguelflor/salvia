@@ -143,7 +143,7 @@ fn exprBp(alloc: std.mem.Allocator, lex: *lexer.Lexer, min_bp: u8) errors.ParseE
                 .keyword_if => try parseSeq(alloc, lex, try parseIf(alloc, lex)),
                 .keyword_struct => try parseSeq(alloc, lex, try parseStruct(alloc, lex)),
                 .keyword_extend => try parseSeq(alloc, lex, try parseExtend(alloc, lex)),
-                // TODO: procedure
+                .keyword_proc => try parseSeq(alloc,lex, try parseProc(alloc, lex)),
                 // TODO: protocol
                 // TODO: return
                 else => error.UnexpectedToken,
