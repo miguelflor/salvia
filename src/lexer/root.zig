@@ -516,7 +516,7 @@ test "punctuation" {
 }
 
 test "keywords" {
-    const code: [:0]const u8 = "if else while for return fun";
+    const code: [:0]const u8 = "if else while for return proc";
     var list = try tokenize(testing.allocator, code);
     defer list.deinit(testing.allocator);
     try testing.expectEqualSlices(TokenType, &[_]TokenType{
@@ -525,7 +525,7 @@ test "keywords" {
         .eof,
     }, list.items(.type));
     try testing.expectEqualDeep(&[_][]const u8{
-        "if", "else", "while", "for", "return", "fun", "",
+        "if", "else", "while", "for", "return", "proc", "",
     }, list.items(.text));
 }
 
