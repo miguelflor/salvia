@@ -97,6 +97,13 @@ pub const Expr = union(enum) {
         interface_name: ?[]const u8,
         methods: []const *Expr,
     },
+    protocol: struct {
+        name: []const u8,
+        interface_name: ?[]const u8,
+        fields: []const Field,
+        upons: []const *Expr,
+        procs: []const *Expr,
+    },
     // types
     array_type: *Expr,
     set_type: *Expr,
@@ -105,6 +112,10 @@ pub const Expr = union(enum) {
 // Helper structs
 
 const FieldSep = enum { colon, none };
+const MethodType = union(enum) {
+    upon_and_proc: struct { upon: std.ArrayList(*Expr), proc: std.ArrayList(*Expr) },
+    proc: std.ArrayList(*Expr),
+};
 
 // Pratt parsing algo
 
@@ -227,6 +238,39 @@ fn parseSeq(alloc: std.mem.Allocator, lex: *lexer.Lexer, expr: Expr) errors.Pars
     return Expr{ .seq = .{ .a = expr_pt, .b = next_expr } };
 }
 
+fn parseProtocol(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Expr {
+    const proto_name = lex.next();
+    if (proto_name.type != .identifier) return error.ExpectedIdentifier;
+
+    var interface_name: ?[]const u8 = null;
+    if (lex.peek().type == .keyword_impl) {
+        _ = lex.next();
+        interface_name = lex.next().text;
+        if (interface_name.type != .identifier) return error.ExpectedIdentifier;
+    }
+
+    if (lex.next().type != .left_brace) return error.ExpectedLBrace;
+    const fields = try parseFields(
+        alloc,
+        lex,
+        &.{ .right_brace, .keyword_upon, .keyword_proc },
+        .colon,
+    );
+
+    var method_type: MethodType = .{ .upon_and_proc = .{ .proc = .empty, .upon = .empty } };
+    try parseFunctions(alloc, lex, &method_type);
+
+    return Expr{ .protocol = .{
+        .name = proto_name.text,
+        .interface_name = interface_name,
+        .fields = fields,
+        .upons = try method_type.upon_and_proc.upon.toOwnedSlice(alloc),
+        .procs = try method_type.upon_and_proc.proc.toOwnedSlice(alloc),
+    }
+    };
+
+}
+
 fn parseExtend(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Expr {
     const struct_name = lex.next();
     if (struct_name.type != .identifier) return error.ExpectedIdentifier;
@@ -239,34 +283,55 @@ fn parseExtend(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Ex
 
     if (lex.next().type != .left_brace) return error.ExpectedLBrace;
 
-    var methods: std.ArrayList(*Expr) = .empty;
-
-    while (lex.peek().type != .right_brace) {
-        const tk = lex.next();
-        const method = try alloc.create(Expr);
-
-        method.* = switch (tk.type) {
-            .keyword_proc => try parseProc(alloc, lex),
-            else => return error.ExpectedProc,
-        };
-
-        try methods.append(alloc, method);
-    }
-
-    _ = lex.next();
+    var method_type: MethodType = .{ .proc = .empty };
+    try parseFunctions(alloc, lex, &method_type);
 
     return Expr{ .extend = .{
         .interface_name = null,
         .struct_name = struct_name.text,
-        .methods = try methods.toOwnedSlice(alloc),
+        .methods = try method_type.proc.toOwnedSlice(alloc),
     } };
 }
 
-fn parseFields(alloc: std.mem.Allocator, lex: *lexer.Lexer, brk: lexer.TokenType, sep: FieldSep) errors.ParseError![]Field {
+// Parses a method, both proc or proc and upon. appends to the given array in method_type struct
+fn parseFunctions(alloc: std.mem.Allocator, lex: *lexer.Lexer, method_type: *MethodType) errors.ParseError!void {
+    while (lex.peek().type != .right_brace) {
+        const tk = lex.next();
+        switch (tk.type) {
+            .keyword_proc => {
+                const method = try alloc.create(Expr);
+                method.* = try parseProc(alloc, lex);
+                switch (method_type.*) {
+                    .upon_and_proc => |*m| try m.proc.append(alloc, method),
+                    .proc => |*m| try m.append(alloc, method),
+                }
+            },
+            .keyword_upon => switch (method_type.*) {
+                .proc => return error.OnlyProc,
+                .upon_and_proc => |*m| {
+                    const upon = try alloc.create(Expr);
+                    upon.* = try parseUpon(alloc, lex);
+                    try m.upon.append(alloc, upon);
+                },
+            },
+            else => return error.ExpectedProc,
+        }
+    }
+
+    _ = lex.next();
+}
+
+fn parseUpon(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Expr {
+    _ = alloc;
+    _ = lex;
+    unreachable;
+}
+
+fn parseFields(alloc: std.mem.Allocator, lex: *lexer.Lexer, brk: []const lexer.TokenType, sep: FieldSep) errors.ParseError![]Field {
     var fields: std.ArrayList(Field) = .empty;
     defer fields.deinit(alloc);
 
-    while (lex.peek().type != brk) {
+    while (std.mem.findScalar(lexer.TokenType, brk, lex.peek().type) == null) {
         const field_name = lex.next();
         if (field_name.type != .identifier) return error.ExpectedIdentifier;
 
@@ -278,7 +343,7 @@ fn parseFields(alloc: std.mem.Allocator, lex: *lexer.Lexer, brk: lexer.TokenType
         tp.* = try parseType(alloc, lex);
 
         const tk = lex.peek();
-        if (tk.type != .comma and tk.type != brk) {
+        if (tk.type != .comma and std.mem.findScalar(lexer.TokenType, brk, tk.type) == null) {
             return error.ExpectedComma;
         }
         if (tk.type == .comma) _ = lex.next();
@@ -296,7 +361,7 @@ fn parseProc(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Expr
     if (name.type != .identifier) return error.ExpectedIdentifier;
     if (lex.next().type != .left_paren) return error.ExpectedLParen;
 
-    const fields = try parseFields(alloc, lex, .right_paren, .none);
+    const fields = try parseFields(alloc, lex, &.{.right_paren}, .none);
 
     var tp: ?*Expr = null;
     if (lex.peek().type != .left_brace) {
@@ -328,7 +393,7 @@ fn parseStruct(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Ex
 
     if (lex.next().type != .left_brace) return error.ExpectedLBrace;
 
-    const fields = try parseFields(alloc, lex, .right_brace, .colon);
+    const fields = try parseFields(alloc, lex, &.{.right_brace}, .colon);
     if (fields.len == 0) return error.ExtendEmpty;
 
     return Expr{ .struct_expr = .{ .name = name.text, .fields = fields } };
