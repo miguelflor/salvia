@@ -134,7 +134,7 @@ test "parse struct: one field array type" {
     try testing.expectEqual(@as(usize, 1), se.fields.len);
     try testing.expectEqualStrings("foo1", se.fields[0].name);
     try testing.expect(se.fields[0].type.* == .array_type);
-    try testing.expectEqualStrings("int", se.fields[0].type.array_type.name.text);
+    try testing.expectEqualStrings("int", se.fields[0].type.array_type.name);
 }
 
 test "parse struct: one field set type" {
@@ -146,7 +146,7 @@ test "parse struct: one field set type" {
     try testing.expectEqual(@as(usize, 1), se.fields.len);
     try testing.expectEqualStrings("foo1", se.fields[0].name);
     try testing.expect(se.fields[0].type.* == .set_type);
-    try testing.expectEqualStrings("int", se.fields[0].type.set_type.name.text);
+    try testing.expectEqualStrings("int", se.fields[0].type.set_type.name);
 }
 
 test "parse struct: set of array type" {
@@ -158,7 +158,7 @@ test "parse struct: set of array type" {
     try testing.expectEqualStrings("foo1", field.name);
     try testing.expect(field.type.* == .set_type);
     try testing.expect(field.type.set_type.* == .array_type);
-    try testing.expectEqualStrings("op", field.type.set_type.array_type.name.text);
+    try testing.expectEqualStrings("op", field.type.set_type.array_type.name);
 }
 
 test "parse struct: array of array type" {
@@ -169,7 +169,7 @@ test "parse struct: array of array type" {
     const field = result.seq.a.struct_expr.fields[0];
     try testing.expect(field.type.* == .array_type);
     try testing.expect(field.type.array_type.* == .array_type);
-    try testing.expectEqualStrings("int", field.type.array_type.array_type.name.text);
+    try testing.expectEqualStrings("int", field.type.array_type.array_type.name);
 }
 
 test "parse struct: set of set type" {
@@ -180,7 +180,7 @@ test "parse struct: set of set type" {
     const field = result.seq.a.struct_expr.fields[0];
     try testing.expect(field.type.* == .set_type);
     try testing.expect(field.type.set_type.* == .set_type);
-    try testing.expectEqualStrings("int", field.type.set_type.set_type.name.text);
+    try testing.expectEqualStrings("int", field.type.set_type.set_type.name);
 }
 
 test "parse struct: two fields with trailing comma" {
@@ -195,7 +195,7 @@ test "parse struct: two fields with trailing comma" {
     try testing.expect(se.fields[0].type.* == .set_type);
     try testing.expectEqualStrings("foo2", se.fields[1].name);
     try testing.expect(se.fields[1].type.* == .name);
-    try testing.expectEqualStrings("string", se.fields[1].type.name.text);
+    try testing.expectEqualStrings("string", se.fields[1].type.name);
 }
 
 test "parse struct: two fields without trailing comma" {
@@ -237,9 +237,9 @@ test "parse proc: two args" {
     try testing.expectEqualStrings("add", p.name);
     try testing.expectEqual(@as(usize, 2), p.fields.len);
     try testing.expectEqualStrings("x", p.fields[0].name);
-    try testing.expectEqualStrings("int", p.fields[0].type.name.text);
+    try testing.expectEqualStrings("int", p.fields[0].type.name);
     try testing.expectEqualStrings("y", p.fields[1].name);
-    try testing.expectEqualStrings("int", p.fields[1].type.name.text);
+    try testing.expectEqualStrings("int", p.fields[1].type.name);
 }
 
 test "parse proc: with return type" {
@@ -251,7 +251,7 @@ test "parse proc: with return type" {
     try testing.expectEqualStrings("foo", p.name);
     try testing.expectEqual(@as(usize, 0), p.fields.len);
     try testing.expect(p.type != null);
-    try testing.expectEqualStrings("int", p.type.?.name.text);
+    try testing.expectEqualStrings("int", p.type.?.name);
     try testing.expectEqualStrings("42", p.content.basic_lit.text);
 }
 

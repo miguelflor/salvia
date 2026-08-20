@@ -65,7 +65,7 @@ const Field = struct { name: []const u8, type: *Expr };
 
 pub const Expr = union(enum) {
     seq: struct { a: *Expr, b: *Expr },
-    name: struct { text: []const u8 },
+    name: []const u8,
     basic_lit: struct { kind: BasicLitKind, text: []const u8 },
     bin_op: struct {
         op: BinOpKind,
@@ -128,7 +128,7 @@ fn exprBp(alloc: std.mem.Allocator, lex: *lexer.Lexer, min_bp: u8) errors.ParseE
         .prefix => {
             const token = lex.next();
             lhs = try switch (token.type) {
-                .identifier => Expr{ .name = .{ .text = token.text } },
+                .identifier => Expr{ .name = token.text },
                 .number => Expr{ .basic_lit = .{ .kind = try BasicLitKind.fromToken(token), .text = token.text } },
                 .minus => blk: {
                     const bp = try prefixBp(token.type);
@@ -337,7 +337,7 @@ fn parseStruct(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Ex
 fn parseType(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Expr {
     const token = lex.next();
     return switch (token.type) {
-        .identifier => Expr{ .name = .{ .text = token.text } },
+        .identifier => Expr{ .name = token.text },
         .left_square => blk: {
             if (.right_square != lex.next().type) return error.ExpectedRSquare;
             const tp = try alloc.create(Expr);
