@@ -75,6 +75,7 @@ pub const Expr = union(enum) {
         op: UniOpKind,
         operand: *Expr,
     },
+    return_expr: *Expr,
     if_expr: struct {
         head: Clause,
         elseifs: []const Clause,
@@ -144,8 +145,8 @@ fn exprBp(alloc: std.mem.Allocator, lex: *lexer.Lexer, min_bp: u8) errors.ParseE
                 .keyword_struct => try parseSeq(alloc, lex, try parseStruct(alloc, lex)),
                 .keyword_extend => try parseSeq(alloc, lex, try parseExtend(alloc, lex)),
                 .keyword_proc => try parseSeq(alloc, lex, try parseProc(alloc, lex)),
+                .keyword_return => try parseSeq(alloc, lex, Expr{ .return_exprtry = try exprBp(alloc, lex, 0) }),
                 // TODO: protocol
-                // TODO: return
                 else => error.UnexpectedToken,
             };
             continue :state .loop;
