@@ -240,13 +240,16 @@ fn parseExtend(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Ex
 
     _ = lex.next();
 
-    return Expr{
-        .extend = .{
-            .interface_name = null,
-            .struct_name = struct_name.text,
-            .methods = try methods.toOwnedSlice(alloc),
-        },
-    };
+    const extend_node = try alloc.create(Expr);
+    extend_node.* = Expr{ .extend = .{
+        .interface_name = null,
+        .struct_name = struct_name.text,
+        .methods = try methods.toOwnedSlice(alloc),
+    } };
+    const rest = try alloc.create(Expr);
+    rest.* = try exprBp(alloc, lex, 0);
+
+    return Expr{ .seq = .{ .a = extend_node, .b = rest } };
 }
 
 fn parseFields(alloc: std.mem.Allocator, lex: *lexer.Lexer, brk: lexer.TokenType, sep: FieldSep) errors.ParseError![]Field {
@@ -314,12 +317,12 @@ fn parseStruct(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Ex
     const fields = try parseFields(alloc, lex, .right_brace, .colon);
     if (fields.len == 0) return error.ExtendEmpty;
 
-    return Expr{
-        .struct_expr = .{
-            .name = name.text,
-            .fields = fields,
-        },
-    };
+    const struct_node = try alloc.create(Expr);
+    struct_node.* = Expr{ .struct_expr = .{ .name = name.text, .fields = fields } };
+    const rest = try alloc.create(Expr);
+    rest.* = try exprBp(alloc, lex, 0);
+
+    return Expr{ .seq = .{ .a = struct_node, .b = rest } };
 }
 
 fn parseType(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Expr {
@@ -526,32 +529,34 @@ test "parse: if elif else" {
 test "parse struct: one field array type" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
-    const result = try parse(arena.allocator(), "struct Foo {foo1: []int}");
-    try testing.expect(result == .struct_expr);
-    try testing.expectEqualStrings("Foo", result.struct_expr.name);
-    try testing.expectEqual(@as(usize, 1), result.struct_expr.fields.len);
-    try testing.expectEqualStrings("foo1", result.struct_expr.fields[0].name);
-    try testing.expect(result.struct_expr.fields[0].type.* == .array_type);
-    try testing.expectEqualStrings("int", result.struct_expr.fields[0].type.array_type.type.name.text);
+    const result = try parse(arena.allocator(), "struct Foo {foo1: []int}1");
+    try testing.expect(result == .seq);
+    const se = result.seq.a.struct_expr;
+    try testing.expectEqualStrings("Foo", se.name);
+    try testing.expectEqual(@as(usize, 1), se.fields.len);
+    try testing.expectEqualStrings("foo1", se.fields[0].name);
+    try testing.expect(se.fields[0].type.* == .array_type);
+    try testing.expectEqualStrings("int", se.fields[0].type.array_type.type.name.text);
 }
 
 test "parse struct: one field set type" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
-    const result = try parse(arena.allocator(), "struct Foo {foo1: set[int]}");
-    try testing.expect(result == .struct_expr);
-    try testing.expectEqual(@as(usize, 1), result.struct_expr.fields.len);
-    try testing.expectEqualStrings("foo1", result.struct_expr.fields[0].name);
-    try testing.expect(result.struct_expr.fields[0].type.* == .set_type);
-    try testing.expectEqualStrings("int", result.struct_expr.fields[0].type.set_type.type.name.text);
+    const result = try parse(arena.allocator(), "struct Foo {foo1: set[int]}1");
+    try testing.expect(result == .seq);
+    const se = result.seq.a.struct_expr;
+    try testing.expectEqual(@as(usize, 1), se.fields.len);
+    try testing.expectEqualStrings("foo1", se.fields[0].name);
+    try testing.expect(se.fields[0].type.* == .set_type);
+    try testing.expectEqualStrings("int", se.fields[0].type.set_type.type.name.text);
 }
 
 test "parse struct: set of array type" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
-    const result = try parse(arena.allocator(), "struct Foo {foo1: set[[]op]}");
-    try testing.expect(result == .struct_expr);
-    const field = result.struct_expr.fields[0];
+    const result = try parse(arena.allocator(), "struct Foo {foo1: set[[]op]}1");
+    try testing.expect(result == .seq);
+    const field = result.seq.a.struct_expr.fields[0];
     try testing.expectEqualStrings("foo1", field.name);
     try testing.expect(field.type.* == .set_type);
     try testing.expect(field.type.set_type.type.* == .array_type);
@@ -561,9 +566,9 @@ test "parse struct: set of array type" {
 test "parse struct: array of array type" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
-    const result = try parse(arena.allocator(), "struct Foo {grid: [][]int}");
-    try testing.expect(result == .struct_expr);
-    const field = result.struct_expr.fields[0];
+    const result = try parse(arena.allocator(), "struct Foo {grid: [][]int}1");
+    try testing.expect(result == .seq);
+    const field = result.seq.a.struct_expr.fields[0];
     try testing.expect(field.type.* == .array_type);
     try testing.expect(field.type.array_type.type.* == .array_type);
     try testing.expectEqualStrings("int", field.type.array_type.type.array_type.type.name.text);
@@ -572,9 +577,9 @@ test "parse struct: array of array type" {
 test "parse struct: set of set type" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
-    const result = try parse(arena.allocator(), "struct Foo {nested: set[set[int]]}");
-    try testing.expect(result == .struct_expr);
-    const field = result.struct_expr.fields[0];
+    const result = try parse(arena.allocator(), "struct Foo {nested: set[set[int]]}1");
+    try testing.expect(result == .seq);
+    const field = result.seq.a.struct_expr.fields[0];
     try testing.expect(field.type.* == .set_type);
     try testing.expect(field.type.set_type.type.* == .set_type);
     try testing.expectEqualStrings("int", field.type.set_type.type.set_type.type.name.text);
@@ -583,34 +588,33 @@ test "parse struct: set of set type" {
 test "parse struct: two fields with trailing comma" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
-    const result = try parse(arena.allocator(), "struct Foo {foo1: set[[]op], foo2: string,}");
-    try testing.expect(result == .struct_expr);
-    try testing.expectEqualStrings("Foo", result.struct_expr.name);
-    try testing.expectEqual(@as(usize, 2), result.struct_expr.fields.len);
-    try testing.expectEqualStrings("foo1", result.struct_expr.fields[0].name);
-    try testing.expect(result.struct_expr.fields[0].type.* == .set_type);
-    try testing.expectEqualStrings("foo2", result.struct_expr.fields[1].name);
-    try testing.expect(result.struct_expr.fields[1].type.* == .name);
-    try testing.expectEqualStrings("string", result.struct_expr.fields[1].type.name.text);
+    const result = try parse(arena.allocator(), "struct Foo {foo1: set[[]op], foo2: string,}1");
+    try testing.expect(result == .seq);
+    const se = result.seq.a.struct_expr;
+    try testing.expectEqualStrings("Foo", se.name);
+    try testing.expectEqual(@as(usize, 2), se.fields.len);
+    try testing.expectEqualStrings("foo1", se.fields[0].name);
+    try testing.expect(se.fields[0].type.* == .set_type);
+    try testing.expectEqualStrings("foo2", se.fields[1].name);
+    try testing.expect(se.fields[1].type.* == .name);
+    try testing.expectEqualStrings("string", se.fields[1].type.name.text);
 }
 
 test "parse struct: two fields without trailing comma" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
-    const result = try parse(arena.allocator(), "struct Foo {foo1: set[[]op], foo2: string}");
-    try testing.expect(result == .struct_expr);
-    try testing.expectEqual(@as(usize, 2), result.struct_expr.fields.len);
-    try testing.expectEqualStrings("foo1", result.struct_expr.fields[0].name);
-    try testing.expectEqualStrings("foo2", result.struct_expr.fields[1].name);
+    const result = try parse(arena.allocator(), "struct Foo {foo1: set[[]op], foo2: string}1");
+    try testing.expect(result == .seq);
+    const se = result.seq.a.struct_expr;
+    try testing.expectEqual(@as(usize, 2), se.fields.len);
+    try testing.expectEqualStrings("foo1", se.fields[0].name);
+    try testing.expectEqualStrings("foo2", se.fields[1].name);
 }
 
 test "parse struct: empty struct" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
-    const result = try parse(arena.allocator(), "struct Empty {}");
-    try testing.expect(result == .struct_expr);
-    try testing.expectEqualStrings("Empty", result.struct_expr.name);
-    try testing.expectEqual(@as(usize, 0), result.struct_expr.fields.len);
+    try testing.expectError(error.ExtendEmpty, parse(arena.allocator(), "struct Empty {}1"));
 }
 
 test "parse: postfix ! binds tighter than +" {
