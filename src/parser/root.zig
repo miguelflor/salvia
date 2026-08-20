@@ -153,7 +153,7 @@ fn exprBp(alloc: std.mem.Allocator, lex: *lexer.Lexer, min_bp: u8) errors.ParseE
         .loop => {
             switch (lex.peek().type) {
                 .eof, .right_paren, .right_brace => return lhs,
-                // TODO: ; logic Seq{lhs, exprBp(alloc, lex);
+                .semicolon => return try parseSeq(alloc, lex, lhs),
                 .minus, .plus, .mult => continue :state .bin_op,
                 .not => continue :state .post_uni_op,
                 else => return error.NotImplemented,
