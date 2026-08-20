@@ -288,6 +288,79 @@ test "parse extend: two methods" {
     try testing.expectEqualStrings("baz", e.methods[1].proc.name);
 }
 
+test "parse protocol: empty body" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const result = try parse(arena.allocator(), "protocol Foo {}1");
+    try testing.expect(result == .seq);
+    const p = result.seq.a.protocol;
+    try testing.expectEqualStrings("Foo", p.name);
+    try testing.expectEqual(@as(?[]const u8, null), p.interface_name);
+    try testing.expectEqual(@as(usize, 0), p.fields.len);
+    try testing.expectEqual(@as(usize, 0), p.upons.len);
+    try testing.expectEqual(@as(usize, 0), p.procs.len);
+}
+
+test "parse protocol: one proc" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const result = try parse(arena.allocator(), "protocol Foo { proc bar() { 1 } }1");
+    try testing.expect(result == .seq);
+    const p = result.seq.a.protocol;
+    try testing.expectEqualStrings("Foo", p.name);
+    try testing.expectEqual(@as(?[]const u8, null), p.interface_name);
+    try testing.expectEqual(@as(usize, 0), p.fields.len);
+    try testing.expectEqual(@as(usize, 0), p.upons.len);
+    try testing.expectEqual(@as(usize, 1), p.procs.len);
+    try testing.expectEqualStrings("bar", p.procs[0].proc.name);
+}
+
+test "parse protocol: two procs" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const result = try parse(arena.allocator(), "protocol Foo { proc bar() { 1 } proc baz() { 2 } }1");
+    try testing.expect(result == .seq);
+    const p = result.seq.a.protocol;
+    try testing.expectEqual(@as(usize, 2), p.procs.len);
+    try testing.expectEqualStrings("bar", p.procs[0].proc.name);
+    try testing.expectEqualStrings("baz", p.procs[1].proc.name);
+}
+
+test "parse protocol: with fields and one proc" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const result = try parse(arena.allocator(), "protocol Foo { x: int, y: string proc bar() { 1 } }1");
+    try testing.expect(result == .seq);
+    const p = result.seq.a.protocol;
+    try testing.expectEqualStrings("Foo", p.name);
+    try testing.expectEqual(@as(usize, 2), p.fields.len);
+    try testing.expectEqualStrings("x", p.fields[0].name);
+    try testing.expectEqualStrings("int", p.fields[0].type.name);
+    try testing.expectEqualStrings("y", p.fields[1].name);
+    try testing.expectEqualStrings("string", p.fields[1].type.name);
+    try testing.expectEqual(@as(usize, 1), p.procs.len);
+    try testing.expectEqualStrings("bar", p.procs[0].proc.name);
+}
+
+test "parse protocol: impl interface" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const result = try parse(arena.allocator(), "protocol Foo impl Bar { proc baz() { 1 } }1");
+    try testing.expect(result == .seq);
+    const p = result.seq.a.protocol;
+    try testing.expectEqualStrings("Foo", p.name);
+    try testing.expect(p.interface_name != null);
+    try testing.expectEqualStrings("Bar", p.interface_name.?);
+    try testing.expectEqual(@as(usize, 1), p.procs.len);
+    try testing.expectEqualStrings("baz", p.procs[0].proc.name);
+}
+
+test "parse protocol: upon in proc-only extend errors" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    try testing.expectError(error.OnlyProc, parse(arena.allocator(), "extend Foo { upon foo { 1 } }1"));
+}
+
 test "parse: postfix ! binds tighter than +" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();

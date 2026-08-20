@@ -107,6 +107,12 @@ pub const Expr = union(enum) {
     // types
     array_type: *Expr,
     set_type: *Expr,
+
+    fn create(self: Expr, alloc: std.mem.Allocator) !*Expr {
+        const expr = try alloc.create(Expr);
+        expr.* = self;
+        return expr;
+    }
 };
 
 // Helper structs
@@ -143,8 +149,7 @@ fn exprBp(alloc: std.mem.Allocator, lex: *lexer.Lexer, min_bp: u8) errors.ParseE
                 .number => Expr{ .basic_lit = .{ .kind = try BasicLitKind.fromToken(token), .text = token.text } },
                 .minus => blk: {
                     const bp = try prefixBp(token.type);
-                    const rhs = try alloc.create(Expr);
-                    rhs.* = try exprBp(alloc, lex, bp.r);
+                    const rhs = try (try exprBp(alloc, lex, bp.r)).create(alloc);
                     break :blk Expr{ .uni_op = .{ .op = try UniOpKind.fromToken(token.type), .operand = rhs } };
                 },
                 .left_paren => blk: {
@@ -157,7 +162,7 @@ fn exprBp(alloc: std.mem.Allocator, lex: *lexer.Lexer, min_bp: u8) errors.ParseE
                 .keyword_struct => try parseSeq(alloc, lex, try parseStruct(alloc, lex)),
                 .keyword_extend => try parseSeq(alloc, lex, try parseExtend(alloc, lex)),
                 .keyword_proc => try parseSeq(alloc, lex, try parseProc(alloc, lex)),
-                .keyword_return => try parseSeq(alloc, lex, Expr{ .return_exprtry = try exprBp(alloc, lex, 0) }),
+                .keyword_return => try parseSeq(alloc, lex, Expr{ .return_expr = try exprBp(alloc, lex, 0) }),
                 .keyword_protocol => try parseSeq(alloc, lex, try parseProtocol(alloc, lex)),
                 else => error.UnexpectedToken,
             };
@@ -179,10 +184,8 @@ fn exprBp(alloc: std.mem.Allocator, lex: *lexer.Lexer, min_bp: u8) errors.ParseE
             if (bp.l < min_bp) return lhs;
 
             _ = lex.next();
-            const rhs_node = try alloc.create(Expr);
-            rhs_node.* = try exprBp(alloc, lex, bp.r);
-            const lhs_node = try alloc.create(Expr);
-            lhs_node.* = lhs;
+            const rhs_node = try (try exprBp(alloc, lex, bp.r)).create(alloc);
+            const lhs_node = try lhs.create(alloc);
             lhs = .{ .bin_op = .{ .op = op, .lhs = lhs_node, .rhs = rhs_node } };
             continue :state .loop;
         },
@@ -193,8 +196,7 @@ fn exprBp(alloc: std.mem.Allocator, lex: *lexer.Lexer, min_bp: u8) errors.ParseE
             if (bp.l < min_bp) return lhs;
 
             _ = lex.next();
-            const lhs_node = try alloc.create(Expr);
-            lhs_node.* = lhs;
+            const lhs_node = try lhs.create(alloc);
             lhs = .{ .uni_op = .{ .op = op, .operand = lhs_node } };
             continue :state .loop;
         },
@@ -230,10 +232,8 @@ fn infixBp(op: lexer.TokenType) errors.ParseError!Bp {
 // Parse expressions
 
 fn parseSeq(alloc: std.mem.Allocator, lex: *lexer.Lexer, expr: Expr) errors.ParseError!Expr {
-    const expr_pt = try alloc.create(Expr);
-    expr_pt.* = expr;
-    const next_expr = try alloc.create(Expr);
-    next_expr.* = try exprBp(alloc, lex, 0);
+    const expr_pt = try expr.create(alloc);
+    const next_expr = try (try exprBp(alloc, lex, 0)).create(alloc);
 
     return Expr{ .seq = .{ .a = expr_pt, .b = next_expr } };
 }
@@ -268,9 +268,7 @@ fn parseProtocol(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!
         .fields = fields,
         .upons = try method_type.upon_and_proc.upon.toOwnedSlice(alloc),
         .procs = try method_type.upon_and_proc.proc.toOwnedSlice(alloc),
-    }
-    };
-
+    } };
 }
 
 fn parseExtend(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Expr {
@@ -302,8 +300,7 @@ fn parseFunctions(alloc: std.mem.Allocator, lex: *lexer.Lexer, method_type: *Met
         const tk = lex.next();
         switch (tk.type) {
             .keyword_proc => {
-                const method = try alloc.create(Expr);
-                method.* = try parseProc(alloc, lex);
+                const method = try (try parseProc(alloc, lex)).create(alloc);
                 switch (method_type.*) {
                     .upon_and_proc => |*m| try m.proc.append(alloc, method),
                     .proc => |*m| try m.append(alloc, method),
@@ -312,8 +309,7 @@ fn parseFunctions(alloc: std.mem.Allocator, lex: *lexer.Lexer, method_type: *Met
             .keyword_upon => switch (method_type.*) {
                 .proc => return error.OnlyProc,
                 .upon_and_proc => |*m| {
-                    const upon = try alloc.create(Expr);
-                    upon.* = try parseUpon(alloc, lex);
+                    const upon = try (try parseUpon(alloc, lex)).create(alloc);
                     try m.upon.append(alloc, upon);
                 },
             },
@@ -342,8 +338,7 @@ fn parseFields(alloc: std.mem.Allocator, lex: *lexer.Lexer, brk: []const lexer.T
             if (lex.next().type != .colon) return error.ExpectedColon;
         }
 
-        const tp = try alloc.create(Expr);
-        tp.* = try parseType(alloc, lex);
+        const tp = try (try parseType(alloc, lex)).create(alloc);
 
         const tk = lex.peek();
         if (tk.type != .comma and std.mem.findScalar(lexer.TokenType, brk, tk.type) == null) {
@@ -368,15 +363,12 @@ fn parseProc(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Expr
 
     var tp: ?*Expr = null;
     if (lex.peek().type != .left_brace) {
-        const tp_ptr = try alloc.create(Expr);
-        tp_ptr.* = try parseType(alloc, lex);
-        tp = tp_ptr;
+        tp = try (try parseType(alloc, lex)).create(alloc);
     }
 
     if (lex.next().type != .left_brace) return error.ExpectedLBrace;
 
-    const content = try alloc.create(Expr);
-    content.* = try exprBp(alloc, lex, 0);
+    const content = try (try exprBp(alloc, lex, 0)).create(alloc);
 
     if (lex.next().type != .right_brace) return error.ExpectedRBrace;
 
@@ -408,15 +400,12 @@ fn parseType(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Expr
         .identifier => Expr{ .name = token.text },
         .left_square => blk: {
             if (.right_square != lex.next().type) return error.ExpectedRSquare;
-            const tp = try alloc.create(Expr);
-            tp.* = try parseType(alloc, lex);
-
+            const tp = try (try parseType(alloc, lex)).create(alloc);
             break :blk Expr{ .array_type = tp };
         },
         .keyword_set => blk: {
             if (.left_square != lex.next().type) return error.ExpectedLSquare;
-            const tp = try alloc.create(Expr);
-            tp.* = try parseType(alloc, lex);
+            const tp = try (try parseType(alloc, lex)).create(alloc);
 
             if (.right_square != lex.next().type) return error.ExpectedRSquare;
 
@@ -456,8 +445,7 @@ fn parseIf(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Expr {
 fn parseIfCondBody(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Clause {
     var t = lex.next();
     if (t.type != .left_paren) return error.ExpectedRParen;
-    const cond = try alloc.create(Expr);
-    cond.* = try exprBp(alloc, lex, 0);
+    const cond = try (try exprBp(alloc, lex, 0)).create(alloc);
     t = lex.next();
     if (t.type != .right_paren) return error.ExpectedLParen;
 
@@ -469,8 +457,7 @@ fn parseIfCondBody(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseErro
 fn parseBody(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!*Expr {
     var t = lex.next();
     if (t.type != .left_brace) return error.ExpectedLBrace;
-    const body = try alloc.create(Expr);
-    body.* = try exprBp(alloc, lex, 0);
+    const body = try (try exprBp(alloc, lex, 0)).create(alloc);
     t = lex.next();
     if (t.type != .right_brace) return error.ExpectedRBrace;
 
