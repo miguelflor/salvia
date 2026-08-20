@@ -86,7 +86,7 @@ const Expr = union(enum) {
     },
     extend: struct {
         struct_name: []const u8,
-        interface_name: []const u8,
+        interface_name: ?[]const u8,
         methods: []const *Expr,
     },
     // types
@@ -236,7 +236,7 @@ fn parseExtend(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Ex
 
     return Expr{
         .extend = .{
-            .interface_name = interface_name.text,
+            .interface_name = null,
             .struct_name = struct_name.text,
             .methods = try methods.toOwnedSlice(alloc),
         },
