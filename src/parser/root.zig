@@ -258,6 +258,8 @@ fn parseProtocol(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!
     );
 
     var method_type: MethodType = .{ .upon_and_proc = .{ .proc = .empty, .upon = .empty } };
+    defer method_type.upon_and_proc.upon.deinit(alloc);
+    defer method_type.upon_and_proc.proc.deinit(alloc);
     try parseFunctions(alloc, lex, &method_type);
 
     return Expr{ .protocol = .{
@@ -284,6 +286,7 @@ fn parseExtend(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Ex
     if (lex.next().type != .left_brace) return error.ExpectedLBrace;
 
     var method_type: MethodType = .{ .proc = .empty };
+    defer method_type.proc.deinit(alloc);
     try parseFunctions(alloc, lex, &method_type);
 
     return Expr{ .extend = .{
