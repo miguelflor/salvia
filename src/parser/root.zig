@@ -619,6 +619,79 @@ test "parse struct: empty struct" {
     try testing.expectError(error.ExtendEmpty, parse(arena.allocator(), "struct Empty {}1"));
 }
 
+test "parse proc: no args no return type" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const result = try parse(arena.allocator(), "proc foo() { 42 }1");
+    try testing.expect(result == .seq);
+    const p = result.seq.a.proc;
+    try testing.expectEqualStrings("foo", p.name);
+    try testing.expectEqual(@as(usize, 0), p.fields.len);
+    try testing.expectEqual(@as(?*Expr, null), p.type);
+    try testing.expect(p.content.* == .basic_lit);
+    try testing.expectEqualStrings("42", p.content.basic_lit.text);
+}
+
+test "parse proc: two args" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const result = try parse(arena.allocator(), "proc add(x int, y int) { x }1");
+    try testing.expect(result == .seq);
+    const p = result.seq.a.proc;
+    try testing.expectEqualStrings("add", p.name);
+    try testing.expectEqual(@as(usize, 2), p.fields.len);
+    try testing.expectEqualStrings("x", p.fields[0].name);
+    try testing.expectEqualStrings("int", p.fields[0].type.name.text);
+    try testing.expectEqualStrings("y", p.fields[1].name);
+    try testing.expectEqualStrings("int", p.fields[1].type.name.text);
+}
+
+test "parse proc: with return type" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const result = try parse(arena.allocator(), "proc foo() int { 42 }1");
+    try testing.expect(result == .seq);
+    const p = result.seq.a.proc;
+    try testing.expectEqualStrings("foo", p.name);
+    try testing.expectEqual(@as(usize, 0), p.fields.len);
+    try testing.expect(p.type != null);
+    try testing.expectEqualStrings("int", p.type.?.name.text);
+    try testing.expectEqualStrings("42", p.content.basic_lit.text);
+}
+
+test "parse extend: empty body" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const result = try parse(arena.allocator(), "extend Foo {}1");
+    try testing.expect(result == .seq);
+    const e = result.seq.a.extend;
+    try testing.expectEqualStrings("Foo", e.struct_name);
+    try testing.expectEqual(@as(?[]const u8, null), e.interface_name);
+    try testing.expectEqual(@as(usize, 0), e.methods.len);
+}
+
+test "parse extend: one method" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const result = try parse(arena.allocator(), "extend Foo { proc bar() { 1 } }1");
+    try testing.expect(result == .seq);
+    const e = result.seq.a.extend;
+    try testing.expectEqualStrings("Foo", e.struct_name);
+    try testing.expectEqual(@as(usize, 1), e.methods.len);
+    try testing.expectEqualStrings("bar", e.methods[0].proc.name);
+}
+
+test "parse extend: two methods" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const result = try parse(arena.allocator(), "extend Foo { proc bar() { 1 } proc baz() { 2 } }1");
+    try testing.expect(result == .seq);
+    const e = result.seq.a.extend;
+    try testing.expectEqual(@as(usize, 2), e.methods.len);
+    try testing.expectEqualStrings("bar", e.methods[0].proc.name);
+    try testing.expectEqualStrings("baz", e.methods[1].proc.name);
+}
+
 test "parse: postfix ! binds tighter than +" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
