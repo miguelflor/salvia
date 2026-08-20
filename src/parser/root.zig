@@ -84,6 +84,12 @@ const Expr = union(enum) {
         name: []const u8,
         fields: []const Field,
     },
+    proc: struct {
+        name: []const u8,
+        fields: []const Field,
+        type: ?*Expr,
+        content: *Expr,
+    },
     extend: struct {
         struct_name: []const u8,
         interface_name: ?[]const u8,
@@ -277,10 +283,24 @@ fn parseProc(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Expr
     if (name.type != .identifier) return error.ExpectedIdentifier;
     if (lex.next().type != .left_paren) return error.ExpectedLParen;
 
+    const fields = try parseFields(alloc, lex, .right_paren, .none);
+
+    var tp = null;
+    if (lex.peek().type != .left_brace) tp = try parseType(alloc, lex);
+
+    if (lex.next().type != .left_brace) return error.ExpectedLBrace;
+
+    const content = alloc.create(Expr);
+    content.* = exprBp(alloc, lex, 0);
+
+    if (lex.next().type != .right_brace) return error.ExpectedRBrace;
+
     return Expr{
         .proc = .{
             .name = name.text,
-            .fields = try parseFields(alloc, lex, .right_paren, .none),
+            .fields = fields,
+            .type = tp,
+            .content = content,
         },
     };
 }
