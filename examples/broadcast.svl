@@ -11,8 +11,8 @@ interface Broadcast {
 }
 
 protocol BebBroadcast impl Broadcast{
-    let ids: set[id]
-    let delieverBeb: trigger[Message]
+    ids: set[id],
+    delieverBeb: trigger[Message],
 
     proc init() {
         return BebBroadcast{ids: Self.ids, delieverBeb: init(trigger[Message])};
