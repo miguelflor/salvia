@@ -22,19 +22,16 @@ struct Message {
 }
 
 
-pub interface Broadcast {
+interface Broadcast {
     init: proc() Broadcast,
     send: proc(self, Message) (),
     getDeliver: proc(self) trigger[Message],
     upon(<~Message),
 }
 
-struct BebBroadcast {
-    ids set[id], // the user can't touch this by default accessing thourght a different namespace is private
-    delieverBeb trigger[Message],
-}
-
-extend Broadcast with BebBroadcast{
+protocol BebBroadcast impl Broadcast{
+    let ids: set[id]
+    let delieverBeb: trigger[Message]
 
     proc init() {
         return BebBroadcast{ids: Self.ids, delieverBeb: init(trigger[Message])};
@@ -45,7 +42,7 @@ extend Broadcast with BebBroadcast{
     }
 
     proc send(msg Message) {
-        msg = Message{ msg: "something" }; // ; behaves like rust
+        let msg = Message{ msg: "something" }; // ; behaves like rust
         {id <~ msg : id in self.ids} // <~ is to make a message through RPC
     }
 
