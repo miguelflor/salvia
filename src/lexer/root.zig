@@ -56,6 +56,8 @@ pub const TokenType = enum {
     // keywords.
     keyword_struct,
     keyword_set,
+    keyword_protocol,
+    keyword_impl,
     keyword_with,
     keyword_extend,
     keyword_else,
@@ -78,6 +80,8 @@ pub const TokenType = enum {
 const keywordStr = std.StaticStringMap(TokenType).initComptime(.{
     .{ "struct", .keyword_struct },
     .{ "set", .keyword_set },
+    .{ "protocol", .keyword_protocol },
+    .{ "impl", .keyword_impl },
     .{ "with", .keyword_with },
     .{ "extend", .keyword_extend },
     .{ "else", .keyword_else },
