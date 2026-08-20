@@ -140,11 +140,9 @@ fn exprBp(alloc: std.mem.Allocator, lex: *lexer.Lexer, min_bp: u8) errors.ParseE
                     if (t.type != .right_paren) return error.ExpectedRParen;
                     break :blk rhs;
                 },
-                // TODO: Multiple things to do. First make it so the Seq is made on this side
-                // Thiis can be usefull when making the extend not a full expresion inside and instead a array of exprs
-                .keyword_if => try parseIf(alloc, lex),
-                .keyword_struct => try parseStruct(alloc, lex),
-                .keyword_extend => try parseExtend(alloc, lex),
+                .keyword_if => try parseSeq(alloc, lex, try parseIf(alloc, lex)),
+                .keyword_struct => try parseSeq(alloc, lex, try parseStruct(alloc, lex)),
+                .keyword_extend => try parseSeq(alloc, lex, try parseExtend(alloc, lex)),
                 // TODO: procedure
                 // TODO: protocol
                 // TODO: return
@@ -218,6 +216,15 @@ fn infixBp(op: lexer.TokenType) errors.ParseError!Bp {
 
 // Parse expressions
 
+fn parseSeq(alloc: std.mem.Allocator, lex: *lexer.Lexer, expr: Expr) errors.ParseError!Expr {
+    const expr_pt = try alloc.create(Expr);
+    expr_pt.* = expr;
+    const next_expr = try alloc.create(Expr);
+    next_expr.* = try exprBp(alloc, lex, 0);
+
+    return Expr{ .seq = .{ .a = expr_pt, .b = next_expr } };
+}
+
 fn parseExtend(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Expr {
     const struct_name = lex.next();
     if (struct_name.type != .identifier) return error.ExpectedIdentifier;
@@ -246,16 +253,11 @@ fn parseExtend(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Ex
 
     _ = lex.next();
 
-    const extend_node = try alloc.create(Expr);
-    extend_node.* = Expr{ .extend = .{
+    return Expr{ .extend = .{
         .interface_name = null,
         .struct_name = struct_name.text,
         .methods = try methods.toOwnedSlice(alloc),
     } };
-    const rest = try alloc.create(Expr);
-    rest.* = try exprBp(alloc, lex, 0);
-
-    return Expr{ .seq = .{ .a = extend_node, .b = rest } };
 }
 
 fn parseFields(alloc: std.mem.Allocator, lex: *lexer.Lexer, brk: lexer.TokenType, sep: FieldSep) errors.ParseError![]Field {
@@ -323,12 +325,7 @@ fn parseStruct(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Ex
     const fields = try parseFields(alloc, lex, .right_brace, .colon);
     if (fields.len == 0) return error.ExtendEmpty;
 
-    const struct_node = try alloc.create(Expr);
-    struct_node.* = Expr{ .struct_expr = .{ .name = name.text, .fields = fields } };
-    const rest = try alloc.create(Expr);
-    rest.* = try exprBp(alloc, lex, 0);
-
-    return Expr{ .seq = .{ .a = struct_node, .b = rest } };
+    return Expr{ .struct_expr = .{ .name = name.text, .fields = fields } };
 }
 
 fn parseType(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Expr {
@@ -373,18 +370,13 @@ fn parseIf(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Expr {
         body = try parseBody(alloc, lex);
     }
 
-    const if_expr = try alloc.create(Expr);
-    if_expr.* = Expr{
+    return Expr{
         .if_expr = .{
             .head = first_if,
             .elseifs = try elseifs.toOwnedSlice(alloc),
             .else_body = body,
         },
     };
-    const rest = try alloc.create(Expr);
-    rest.* = try exprBp(alloc, lex, 0);
-
-    return Expr{ .seq = .{ .a = if_expr, .b = rest } };
 }
 
 fn parseIfCondBody(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Clause {
