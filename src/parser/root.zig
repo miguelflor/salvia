@@ -162,7 +162,11 @@ fn exprBp(alloc: std.mem.Allocator, lex: *lexer.Lexer, min_bp: u8) errors.ParseE
                 .keyword_struct => try parseSeq(alloc, lex, try parseStruct(alloc, lex)),
                 .keyword_extend => try parseSeq(alloc, lex, try parseExtend(alloc, lex)),
                 .keyword_proc => try parseSeq(alloc, lex, try parseProc(alloc, lex)),
-                .keyword_return => try parseSeq(alloc, lex, Expr{ .return_expr = try exprBp(alloc, lex, 0) }),
+                .keyword_return => try parseSeq(
+                    alloc,
+                    lex,
+                    Expr{ .return_expr = try (try exprBp(alloc, lex, 0)).create(alloc) },
+                ),
                 .keyword_protocol => try parseSeq(alloc, lex, try parseProtocol(alloc, lex)),
                 else => error.UnexpectedToken,
             };
@@ -245,8 +249,9 @@ fn parseProtocol(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!
     var interface_name: ?[]const u8 = null;
     if (lex.peek().type == .keyword_impl) {
         _ = lex.next();
-        interface_name = lex.next().text;
-        if (interface_name.type != .identifier) return error.ExpectedIdentifier;
+        const tk = lex.next();
+        if (tk.type != .identifier) return error.ExpectedIdentifier;
+        interface_name = tk.text;
     }
 
     if (lex.next().type != .left_brace) return error.ExpectedLBrace;
@@ -261,6 +266,7 @@ fn parseProtocol(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!
     defer method_type.upon_and_proc.upon.deinit(alloc);
     defer method_type.upon_and_proc.proc.deinit(alloc);
     try parseFunctions(alloc, lex, &method_type);
+    _ = lex.next();
 
     return Expr{ .protocol = .{
         .name = proto_name.text,
@@ -286,6 +292,7 @@ fn parseExtend(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Ex
     var method_type: MethodType = .{ .proc = .empty };
     defer method_type.proc.deinit(alloc);
     try parseFunctions(alloc, lex, &method_type);
+    _ = lex.next();
 
     return Expr{ .extend = .{
         .interface_name = null,
@@ -296,6 +303,8 @@ fn parseExtend(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Ex
 
 // Parses a method, both proc or proc and upon. appends to the given array in method_type struct
 fn parseFunctions(alloc: std.mem.Allocator, lex: *lexer.Lexer, method_type: *MethodType) errors.ParseError!void {
+
+    std.debug.print("{any}\n", .{lex.peek()});
     while (lex.peek().type != .right_brace) {
         const tk = lex.next();
         switch (tk.type) {
@@ -317,7 +326,6 @@ fn parseFunctions(alloc: std.mem.Allocator, lex: *lexer.Lexer, method_type: *Met
         }
     }
 
-    _ = lex.next();
 }
 
 fn parseUpon(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Expr {
@@ -349,7 +357,6 @@ fn parseFields(alloc: std.mem.Allocator, lex: *lexer.Lexer, brk: []const lexer.T
         try fields.append(alloc, Field{ .name = field_name.text, .type = tp });
     }
 
-    _ = lex.next();
 
     return fields.toOwnedSlice(alloc);
 }
@@ -389,6 +396,7 @@ fn parseStruct(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Ex
     if (lex.next().type != .left_brace) return error.ExpectedLBrace;
 
     const fields = try parseFields(alloc, lex, &.{.right_brace}, .colon);
+    _ = lex.next();
     if (fields.len == 0) return error.ExtendEmpty;
 
     return Expr{ .struct_expr = .{ .name = name.text, .fields = fields } };

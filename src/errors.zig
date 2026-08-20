@@ -17,4 +17,5 @@ pub const ParseError = error{
     ExpectedWith,
     ExtendEmpty,
     ExpectedProc,
+    OnlyProc,
 };
