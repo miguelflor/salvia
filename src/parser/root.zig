@@ -94,6 +94,10 @@ const Expr = union(enum) {
     set_type: struct { type: *Expr },
 };
 
+// Helper structs
+
+const Surrond = struct {l: lexer.TokenType, r: lexer.TokenType};
+
 // Pratt parsing algo
 
 const State = enum {
@@ -206,10 +210,11 @@ fn parseExtend(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Ex
     const struct_name = lex.next();
     if (struct_name.type != .identifier) return error.ExpectedIdentifier;
 
-    if (lex.next().type != .keyword_with) return error.ExpectedWith;
-
-    const interface_name = lex.next();
-    if (interface_name.type != .identifier) return error.ExpectedIdentifier;
+    // for now the structs can't be used with interfaces
+    // if (lex.next().type != .keyword_with) return error.ExpectedWith;
+    //
+    // const interface_name = lex.next();
+    // if (interface_name.type != .identifier) return error.ExpectedIdentifier;
 
     if (lex.next().type != .left_brace) return error.ExpectedLBrace;
 
@@ -221,7 +226,6 @@ fn parseExtend(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Ex
 
         method.* = switch (tk.type) {
             .keyword_proc => try parseProc(alloc, lex),
-            .keyword_upon => try parseUpon(alloc, lex),
             else => return error.ExpectedProcOrUpon,
         };
 
@@ -239,29 +243,25 @@ fn parseExtend(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Ex
     };
 }
 
-fn parseStruct(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Expr {
-    const name = lex.next();
-    if (name.type != .identifier) return error.ExpectedIdentifier;
-
-    if (lex.next().type != .left_brace) return error.ExpectedLBrace;
+fn parseFields(alloc: std.mem.Allocator, lex: *lexer.Lexer, surround: Surrond, has_colon: bool) errors.ParseError![]Field {
     var fields: std.ArrayList(Field) = .empty;
     defer fields.deinit(alloc);
 
-    while (lex.peek().type != .right_brace) {
+    while (lex.peek().type != surround.r) {
         const field_name = lex.next();
         if (field_name.type != .identifier) return error.ExpectedIdentifier;
 
-        if (lex.next().type != .colon) return error.ExpectedColon;
+        if (has_colon) {
+            if (lex.next().type != .colon) return error.ExpectedColon;
+        }
+
         const tp = try alloc.create(Expr);
         tp.* = try parseType(alloc, lex);
 
         const tk = lex.peek();
-
-        // the last field can ommit comma
-        if (tk.type != .comma and tk.type != .right_brace) {
+        if (tk.type != .comma and tk.type != surround.r) {
             return error.ExpectedComma;
         }
-
         if (tk.type == .comma) _ = lex.next();
 
         try fields.append(alloc, Field{ .name = field_name.text, .type = tp });
@@ -269,10 +269,33 @@ fn parseStruct(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Ex
 
     _ = lex.next();
 
+    return fields.toOwnedSlice(alloc);
+}
+
+fn parseProc(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Expr {
+    const name = lex.next();
+    if (name.type != .identifier) return error.ExpectedIdentifier;
+    if (lex.next().type != .left_paren) return error.ExpectedLParen;
+
+    return Expr{
+        .proc = .{
+            .name = name.text,
+            .fields = try parseFields(alloc, lex, .{ .l = .left_paren, .r = .right_paren }, false),
+        },
+    };
+}
+
+fn parseStruct(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Expr {
+    const name = lex.next();
+    if (name.type != .identifier) return error.ExpectedIdentifier;
+
+    if (lex.next().type != .left_brace) return error.ExpectedLBrace;
+
+    // TODO: Is it 0, throw error
     return Expr{
         .struct_expr = .{
             .name = name.text,
-            .fields = try fields.toOwnedSlice(alloc),
+            .fields = try parseFields(alloc, lex, .{ .l = .left_brace, .r = .right_brace }, true),
         },
     };
 }
