@@ -26,7 +26,7 @@ interface Broadcast {
     init: proc() Broadcast,
     send: proc(Message),
     getDeliver: proc() trigger[Message],
-    upon(<~Message),
+    upon(rpc[Message]),
 }
 
 protocol BebBroadcast impl Broadcast{
