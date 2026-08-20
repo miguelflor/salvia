@@ -1,6 +1,7 @@
-const lexer = @import("lexer");
 const std = @import("std");
+
 const errors = @import("errors");
+const lexer = @import("lexer");
 
 // Expressions structs
 
@@ -97,8 +98,8 @@ pub const Expr = union(enum) {
         methods: []const *Expr,
     },
     // types
-    array_type: struct { type: *Expr },
-    set_type: struct { type: *Expr },
+    array_type: *Expr,
+    set_type: *Expr,
 };
 
 // Helper structs
@@ -146,7 +147,7 @@ fn exprBp(alloc: std.mem.Allocator, lex: *lexer.Lexer, min_bp: u8) errors.ParseE
                 .keyword_extend => try parseSeq(alloc, lex, try parseExtend(alloc, lex)),
                 .keyword_proc => try parseSeq(alloc, lex, try parseProc(alloc, lex)),
                 .keyword_return => try parseSeq(alloc, lex, Expr{ .return_exprtry = try exprBp(alloc, lex, 0) }),
-                // TODO: protocol
+                .keyword_protocol => try parseSeq(alloc, lex, try parseProtocol(alloc, lex)),
                 else => error.UnexpectedToken,
             };
             continue :state .loop;
@@ -342,7 +343,7 @@ fn parseType(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Expr
             const tp = try alloc.create(Expr);
             tp.* = try parseType(alloc, lex);
 
-            break :blk Expr{ .array_type = .{ .type = tp } };
+            break :blk Expr{ .array_type = tp };
         },
         .keyword_set => blk: {
             if (.left_square != lex.next().type) return error.ExpectedLSquare;
@@ -351,7 +352,7 @@ fn parseType(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Expr
 
             if (.right_square != lex.next().type) return error.ExpectedRSquare;
 
-            break :blk Expr{ .set_type = .{ .type = tp } };
+            break :blk Expr{ .set_type = tp };
         },
         else => error.UnexpectedToken,
     };
