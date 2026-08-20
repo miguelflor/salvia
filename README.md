@@ -43,7 +43,7 @@ protocol BebBroadcast impl Broadcast{
 
     proc send(msg Message) {
         let msg = Message{ msg: "something" }; // ; behaves like rust
-        {id <~ msg : id in self.ids} // <~ is to make a message through RPC
+        .{id <~ msg : id in self.ids} // <~ is to make a message through RPC
     }
 
     upon <~(msg Message) {
