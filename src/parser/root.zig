@@ -143,7 +143,7 @@ fn exprBp(alloc: std.mem.Allocator, lex: *lexer.Lexer, min_bp: u8) errors.ParseE
                 .keyword_if => try parseSeq(alloc, lex, try parseIf(alloc, lex)),
                 .keyword_struct => try parseSeq(alloc, lex, try parseStruct(alloc, lex)),
                 .keyword_extend => try parseSeq(alloc, lex, try parseExtend(alloc, lex)),
-                .keyword_proc => try parseSeq(alloc,lex, try parseProc(alloc, lex)),
+                .keyword_proc => try parseSeq(alloc, lex, try parseProc(alloc, lex)),
                 // TODO: protocol
                 // TODO: return
                 else => error.UnexpectedToken,
@@ -237,7 +237,7 @@ fn parseExtend(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Ex
 
     if (lex.next().type != .left_brace) return error.ExpectedLBrace;
 
-    const methods: std.ArrayList(*Expr) = .empty;
+    var methods: std.ArrayList(*Expr) = .empty;
 
     while (lex.peek().type != .right_brace) {
         const tk = lex.next();
@@ -248,7 +248,7 @@ fn parseExtend(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Ex
             else => return error.ExpectedProc,
         };
 
-        try methods.append(alloc, lex);
+        try methods.append(alloc, method);
     }
 
     _ = lex.next();
@@ -296,13 +296,17 @@ fn parseProc(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Expr
 
     const fields = try parseFields(alloc, lex, .right_paren, .none);
 
-    var tp = null;
-    if (lex.peek().type != .left_brace) tp = try parseType(alloc, lex);
+    var tp: ?*Expr = null;
+    if (lex.peek().type != .left_brace) {
+        const tp_ptr = try alloc.create(Expr);
+        tp_ptr.* = try parseType(alloc, lex);
+        tp = tp_ptr;
+    }
 
     if (lex.next().type != .left_brace) return error.ExpectedLBrace;
 
-    const content = alloc.create(Expr);
-    content.* = exprBp(alloc, lex, 0);
+    const content = try alloc.create(Expr);
+    content.* = try exprBp(alloc, lex, 0);
 
     if (lex.next().type != .right_brace) return error.ExpectedRBrace;
 
