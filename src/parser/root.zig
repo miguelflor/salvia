@@ -96,7 +96,7 @@ const Expr = union(enum) {
 
 // Helper structs
 
-const Surrond = struct { l: lexer.TokenType, r: lexer.TokenType };
+const FieldSep = enum { colon, none };
 
 // Pratt parsing algo
 
@@ -243,15 +243,15 @@ fn parseExtend(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Ex
     };
 }
 
-fn parseFields(alloc: std.mem.Allocator, lex: *lexer.Lexer, surround: Surrond, has_colon: bool) errors.ParseError![]Field {
+fn parseFields(alloc: std.mem.Allocator, lex: *lexer.Lexer, brk: lexer.TokenType, sep: FieldSep) errors.ParseError![]Field {
     var fields: std.ArrayList(Field) = .empty;
     defer fields.deinit(alloc);
 
-    while (lex.peek().type != surround.r) {
+    while (lex.peek().type != brk) {
         const field_name = lex.next();
         if (field_name.type != .identifier) return error.ExpectedIdentifier;
 
-        if (has_colon) {
+        if (sep == .colon) {
             if (lex.next().type != .colon) return error.ExpectedColon;
         }
 
@@ -259,7 +259,7 @@ fn parseFields(alloc: std.mem.Allocator, lex: *lexer.Lexer, surround: Surrond, h
         tp.* = try parseType(alloc, lex);
 
         const tk = lex.peek();
-        if (tk.type != .comma and tk.type != surround.r) {
+        if (tk.type != .comma and tk.type != brk) {
             return error.ExpectedComma;
         }
         if (tk.type == .comma) _ = lex.next();
@@ -280,7 +280,7 @@ fn parseProc(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Expr
     return Expr{
         .proc = .{
             .name = name.text,
-            .fields = try parseFields(alloc, lex, .{ .l = .left_paren, .r = .right_paren }, false),
+            .fields = try parseFields(alloc, lex, .right_paren, .none),
         },
     };
 }
@@ -291,7 +291,7 @@ fn parseStruct(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Ex
 
     if (lex.next().type != .left_brace) return error.ExpectedLBrace;
 
-    const fields = try parseFields(alloc, lex, .{ .l = .left_brace, .r = .right_brace }, true);
+    const fields = try parseFields(alloc, lex, .right_brace, .colon);
     if (fields.len == 0) return error.ExtendEmpty;
 
     return Expr{
