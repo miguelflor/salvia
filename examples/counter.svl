@@ -3,15 +3,15 @@ struct Counter {
 }
 
 extend Counter {
-    proc init() {
-        return Counter{ value: 0 };
+    proc init() Counter {
+        Counter{ value: 0 }
     }
 
     proc increment() {
         self.value = self.value + 1;
     }
 
-    proc get() {
+    proc get() int {
         self.value
     }
 }

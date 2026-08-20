@@ -24,7 +24,7 @@ struct Message {
 
 interface Broadcast {
     init: proc() Broadcast,
-    send: proc(self, Message) (),
+    send: proc(self, Message),
     getDeliver: proc(self) trigger[Message],
     upon(<~Message),
 }
@@ -33,11 +33,11 @@ protocol BebBroadcast impl Broadcast{
     let ids: set[id]
     let delieverBeb: trigger[Message]
 
-    proc init() {
-        return BebBroadcast{ids: Self.ids, delieverBeb: init(trigger[Message])};
+    proc init() BebBroadcast {
+        BebBroadcast{ids: Self.ids, delieverBeb: init(trigger[Message])}
     }
 
-    proc getDeliver() {
+    proc getDeliver() trigger[Message] {
         self.delieverBeb
     }
 
