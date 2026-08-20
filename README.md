@@ -24,8 +24,8 @@ struct Message {
 
 interface Broadcast {
     init: proc() Broadcast,
-    send: proc(self, Message),
-    getDeliver: proc(self) trigger[Message],
+    send: proc(Message),
+    getDeliver: proc() trigger[Message],
     upon(<~Message),
 }
 
