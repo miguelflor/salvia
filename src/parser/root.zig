@@ -140,9 +140,14 @@ fn exprBp(alloc: std.mem.Allocator, lex: *lexer.Lexer, min_bp: u8) errors.ParseE
                     if (t.type != .right_paren) return error.ExpectedRParen;
                     break :blk rhs;
                 },
+                // TODO: Multiple things to do. First make it so the Seq is made on this side
+                // Thiis can be usefull when making the extend not a full expresion inside and instead a array of exprs
                 .keyword_if => try parseIf(alloc, lex),
                 .keyword_struct => try parseStruct(alloc, lex),
                 .keyword_extend => try parseExtend(alloc, lex),
+                // TODO: procedure
+                // TODO: protocol
+                // TODO: return
                 else => error.UnexpectedToken,
             };
             continue :state .loop;
@@ -150,6 +155,7 @@ fn exprBp(alloc: std.mem.Allocator, lex: *lexer.Lexer, min_bp: u8) errors.ParseE
         .loop => {
             switch (lex.peek().type) {
                 .eof, .right_paren, .right_brace => return lhs,
+                // TODO: ; logic Seq{lhs, exprBp(alloc, lex);
                 .minus, .plus, .mult => continue :state .bin_op,
                 .not => continue :state .post_uni_op,
                 else => return error.NotImplemented,
@@ -232,7 +238,7 @@ fn parseExtend(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Ex
 
         method.* = switch (tk.type) {
             .keyword_proc => try parseProc(alloc, lex),
-            else => return error.ExpectedProcOrUpon,
+            else => return error.ExpectedProc,
         };
 
         try methods.append(alloc, lex);
