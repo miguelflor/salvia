@@ -54,8 +54,8 @@ protocol BebBroadcast impl Broadcast{
 
 ## Roadmap
 
-- [x] lexer, with simple code
-- [ ] parser , with simple code (In progress ...)
-- [ ] type checker , with simple code
-- [ ] compiler , with simple code
+- [x] lexer, for a MVP version
+- [x] parser , for a MVP version
+- [ ] type checker , for a MVP version ( in progress ...)
+- [ ] compiler , for a MVP version
 
