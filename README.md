@@ -56,6 +56,7 @@ protocol BebBroadcast impl Broadcast{
 
 - [x] lexer, for a simple version
 - [x] parser , for a simple version
-- [ ] type checker , for a simple version ( in progress ...)
+- [ ] change parser to support imperative syntax ( in progress ...)
+- [ ] type checker , for a simple version 
 - [ ] compiler , for a simple version
 
