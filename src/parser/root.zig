@@ -130,6 +130,7 @@ const State = enum {
     loop,
     bin_op,
     post_uni_op,
+    seq,
 };
 
 // returns an expression tree, free whatever alloc uses, for example with arena
@@ -175,11 +176,21 @@ fn exprBp(alloc: std.mem.Allocator, lex: *lexer.Lexer, min_bp: u8) errors.ParseE
         .loop => {
             switch (lex.peek().type) {
                 .eof, .right_paren, .right_brace => return lhs,
-                .semicolon => return try parseSeq(alloc, lex, lhs),
+                .semicolon => continue :state .seq,
                 .minus, .plus, .mult => continue :state .bin_op,
                 .not => continue :state .post_uni_op,
                 else => return error.NotImplemented,
             }
+        },
+        .seq => {
+            const peek = lex.peek();
+            const bp = try infixBp(peek.type);
+            if (bp.l < min_bp) return lhs;
+
+            _ = lex.next();
+            lhs = try parseSeq(alloc,lex, lhs);
+
+            continue :state .loop;
         },
         .bin_op => {
             const peek = lex.peek();
@@ -233,13 +244,17 @@ fn infixBp(op: lexer.TokenType) errors.ParseError!Bp {
     };
 }
 
+fn seqBp() Bp {
+    return Bp{ .l = 0, .r = 0};
+}
+
 // Parse expressions
 
 fn parseSeq(alloc: std.mem.Allocator, lex: *lexer.Lexer, expr: Expr) errors.ParseError!Expr {
-    const expr_pt = try expr.create(alloc);
-    const next_expr = try (try exprBp(alloc, lex, 0)).create(alloc);
+    const expr_ptr = try expr.create(alloc);
+    const next_expr = try (try exprBp(alloc, lex, seqBp().r)).create(alloc);
 
-    return Expr{ .seq = .{ .a = expr_pt, .b = next_expr } };
+    return Expr{ .seq = .{ .a = expr_ptr, .b = next_expr } };
 }
 
 fn parseProtocol(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Expr {
@@ -303,7 +318,6 @@ fn parseExtend(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Ex
 
 // Parses a method, both proc or proc and upon. appends to the given array in method_type struct
 fn parseFunctions(alloc: std.mem.Allocator, lex: *lexer.Lexer, method_type: *MethodType) errors.ParseError!void {
-
     std.debug.print("{any}\n", .{lex.peek()});
     while (lex.peek().type != .right_brace) {
         const tk = lex.next();
@@ -325,7 +339,6 @@ fn parseFunctions(alloc: std.mem.Allocator, lex: *lexer.Lexer, method_type: *Met
             else => return error.ExpectedProc,
         }
     }
-
 }
 
 fn parseUpon(alloc: std.mem.Allocator, lex: *lexer.Lexer) errors.ParseError!Expr {
@@ -356,7 +369,6 @@ fn parseFields(alloc: std.mem.Allocator, lex: *lexer.Lexer, brk: []const lexer.T
 
         try fields.append(alloc, Field{ .name = field_name.text, .type = tp });
     }
-
 
     return fields.toOwnedSlice(alloc);
 }
