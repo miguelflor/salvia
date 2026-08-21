@@ -24,9 +24,9 @@ struct Message {
 
 interface Broadcast {
     init: proc() Broadcast,
-    send: proc(self, Message),
-    getDeliver: proc(self) trigger[Message],
-    upon(<~Message),
+    send: proc(Message),
+    getDeliver: proc() trigger[Message],
+    upon(rpc[Message]),
 }
 
 protocol BebBroadcast impl Broadcast{
@@ -54,8 +54,8 @@ protocol BebBroadcast impl Broadcast{
 
 ## Roadmap
 
-- [x] lexer, with simple code
-- [ ] parser , with simple code (In progress ...)
-- [ ] type checker , with simple code
-- [ ] compiler , with simple code
+- [x] lexer, for a simple version
+- [x] parser , for a simple version
+- [ ] type checker , for a simple version ( in progress ...)
+- [ ] compiler , for a simple version
 
